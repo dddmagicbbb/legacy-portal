@@ -11,6 +11,9 @@ import java.time.format.DateTimeFormatter;
 /**
  * 일정 서비스.
  * [스멜4] 감사 로그 코드가 또 복붙. [스멜] 시간 겹침(중복 예약) 검증이 길고 읽기 어렵다.
+ *
+ * [리팩토링] 레거시 약어 지역변수 → 의미 있는 이름 (Rename Variable · 스멜9): confirm 의 u → user.
+ *            create 루프의 s 는 상태값이 아니라 일정 객체라 status 로 바꾸지 않았다 (sc · flag1 과 함께 다음 단계에서 정리).
  */
 @Service
 public class ScheduleService {
@@ -67,8 +70,8 @@ public class ScheduleService {
     public void confirm(Long id, Long userId) {
         Schedule sc = repo.findById(id).orElse(null);   // sc = 일정(Schedule 객체)
         if (sc == null) return;
-        User u = userRepo.findById(userId).orElse(null);   // u = 사용자(User 객체)
-        if (u == null) return;
+        User user = userRepo.findById(userId).orElse(null);   // [리팩토링·이름] 레거시 u → user
+        if (user == null) return;
         if (sc.getOwnerId().equals(userId)) {   // 본인 일정만 확정 가능
             if (sc.getStatus() == 0) {          // status==0 → 예정 상태일 때만
                 sc.setStatus(1);   // 1 = 확정 (CONFIRMED)

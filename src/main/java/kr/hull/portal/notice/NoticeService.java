@@ -14,6 +14,9 @@ import java.time.format.DateTimeFormatter;
  * [스멜4 핵심] ApprovalService 와 거의 동일한 "감사 로그/메일 본문" 로직이 또 복붙되어 있다.
  *             → Day2 '중복 코드 제거 자동화 (공통 모듈 추출)' 실습의 주재료.
  * [스멜5] 역시 협력 객체를 직접 new.
+ *
+ * [리팩토링] 레거시 약어 지역변수 → 의미 있는 이름 (Rename Variable · 스멜9): publish 의 u → user, statusLabel 의 s → status.
+ *            이름만 바꿨고 동작은 그대로. 공지 객체 n 은 다음 단계에서 정리.
  */
 @Service
 public class NoticeService {
@@ -49,11 +52,11 @@ public class NoticeService {
     public void publish(Long id, Long userId) {
         Notice n = repo.findById(id).orElse(null);   // n = 공지(Notice 객체)
         if (n == null) return;
-        User u = userRepo.findById(userId).orElse(null);   // u = 사용자(User 객체)
-        if (u == null) return;
+        User user = userRepo.findById(userId).orElse(null);   // [리팩토링·이름] 레거시 u → user
+        if (user == null) return;
 
         // [스멜3] 권한 매직넘버. [스멜2] 게시 + 긴급공지 메일 + 로그를 한 메서드에서.
-        if (u.getRole() >= 2) {        // role 1=사원·2=팀장·3=임원 (role>=2 팀장 이상 게시권한)  [ApprovalService 와 똑같은 권한 판정 복붙]
+        if (user.getRole() >= 2) {        // role 1=사원·2=팀장·3=임원 (role>=2 팀장 이상 게시권한)  [ApprovalService 와 똑같은 권한 판정 복붙]
             if (n.getStatus() == 0) {  // status==0 → 임시(게시 전)일 때만
                 n.setStatus(1);   // 1 = 게시 (PUBLISHED)
                 repo.save(n);
@@ -74,10 +77,10 @@ public class NoticeService {
 
     // [스멜10] statusLabel 도 ApprovalService 와 거의 같은 구조로 또 존재한다.
     public String statusLabel(Notice n) {
-        int s = n.getStatus();   // s = status(상태): 0 임시·1 게시·9 내림
-        if (s == 0) return "임시";        // 0~9 라벨 번역 — ApprovalService.statusLabel 과 판박이(중복)
-        else if (s == 1) return "게시";
-        else if (s == 9) return "내림";
+        int status = n.getStatus();   // [리팩토링·이름] 레거시 s → status. 값: 0 임시·1 게시·9 내림
+        if (status == 0) return "임시";        // 0~9 라벨 번역 — ApprovalService.statusLabel 과 판박이(중복)
+        else if (status == 1) return "게시";
+        else if (status == 9) return "내림";
         else return "알수없음";
     }
 }

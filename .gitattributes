@@ -1,0 +1,2 @@
+# 셸 스크립트(투두가드 훅)는 LF 고정 - CRLF 가 되면 bash 실행이 깨진다
+*.sh text eol=lf

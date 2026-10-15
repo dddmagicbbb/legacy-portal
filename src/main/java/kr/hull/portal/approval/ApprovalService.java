@@ -30,22 +30,25 @@ import java.util.List;
  * [리팩토링] 레거시 약어 지역변수·파라미터 → 의미 있는 이름으로 (Rename Variable · 스멜9 Poor Naming 해소)
  *  - d → approval, u → user, s → status (create · processApproval · statusLabel · amountGrade)
  *  - processApproval 의 임시변수 proc 제거 → 파라미터 action 을 직접 비교
+ *  - tmp → label (statusLabel), a → amount (amountGrade), act·id → auditAction·approvalId (writeAudit), line → auditLine (create)
+ *  - 필드 repo·userRepo·mail·audit → approvalRepository·userRepository·mailSender·auditLogger (생성자 파라미터 이름도 함께)
  *  - 이름만 바꿨다. 로직·분기·매직넘버·public 시그니처·동작은 그대로 (ApprovalServiceTest 6개 green 으로 확인)
- *  - 남은 약어 tmp(statusLabel) · a(amountGrade) 는 다음 단계에서 정리
  */
 @Service
 public class ApprovalService {
 
-    private final ApprovalRepository repo;
-    private final UserRepository userRepo;
+    // [리팩토링·이름] 레거시 repo · userRepo → approvalRepository · userRepository (무엇의 저장소인지 드러냄)
+    private final ApprovalRepository approvalRepository;
+    private final UserRepository userRepository;
 
     // [스멜5] 강결합 — 협력 객체를 생성자 주입 없이 직접 new 한다. 테스트에서 갈아끼울 수 없다.
-    private final SmtpMailSender mail = new SmtpMailSender();
-    private final FileAuditLogger audit = new FileAuditLogger();
+    // [리팩토링·이름] 레거시 mail · audit → mailSender · auditLogger (역할이 드러나는 이름. 직접 new 는 B02 에서 생성자 주입으로)
+    private final SmtpMailSender mailSender = new SmtpMailSender();
+    private final FileAuditLogger auditLogger = new FileAuditLogger();
 
-    public ApprovalService(ApprovalRepository repo, UserRepository userRepo) {
-        this.repo = repo;
-        this.userRepo = userRepo;
+    public ApprovalService(ApprovalRepository approvalRepository, UserRepository userRepository) {
+        this.approvalRepository = approvalRepository;
+        this.userRepository = userRepository;
     }
 
     // [스멜8] 파라미터 8개. [스멜9] 이름이 모호하다.
@@ -62,13 +65,13 @@ public class ApprovalService {
         approval.setAmount(amount);
         approval.setCreatedAt(LocalDateTime.now());
         approval.setUpdatedAt(LocalDateTime.now());
-        repo.save(approval);
+        approvalRepository.save(approval);
 
         // [스멜4] 감사 로그 기록 — 이 6줄이 submit/approve/reject/cancel 에도 복붙 되어 있다.
         String now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-        String line = "[" + now + "] APPROVAL CREATE id=" + approval.getId()
+        String auditLine = "[" + now + "] APPROVAL CREATE id=" + approval.getId()
                 + " by=" + drafterId + " type=" + approval.getType();
-        audit.write(line);
+        auditLogger.write(auditLine);
         return approval;
     }
 
@@ -79,12 +82,12 @@ public class ApprovalService {
      * action: 1=상신, 2=승인, 3=반려, 9=취소
      */
     public void processApproval(Long id, Long userId, int action, String reason) {
-        Approval approval = repo.findById(id).orElse(null);   // [리팩토링·이름] 레거시 d → approval
+        Approval approval = approvalRepository.findById(id).orElse(null);   // [리팩토링·이름] 레거시 d → approval
         if (approval == null) {
             // [스멜] 예외 대신 조용히 리턴 — 호출자는 실패를 알 수 없다.
             return;
         }
-        User user = userRepo.findById(userId).orElse(null);   // [리팩토링·이름] 레거시 u → user
+        User user = userRepository.findById(userId).orElse(null);   // [리팩토링·이름] 레거시 u → user
         if (user == null) {
             return;
         }
@@ -102,14 +105,14 @@ public class ApprovalService {
                 }
                 approval.setStatus(1);   // 1 = 상신 (SUBMITTED)
                 approval.setUpdatedAt(LocalDateTime.now());
-                repo.save(approval);
+                approvalRepository.save(approval);
                 // [스멜4] 메일 발송 — 본문 생성 로직이 곳곳에 복붙.
-                User approver = userRepo.findById(approval.getApproverId()).orElse(null);
+                User approver = userRepository.findById(approval.getApproverId()).orElse(null);
                 if (approver != null) {
                     String body = "안녕하세요 " + approver.getName() + "님,\n"
                             + "결재 요청이 도착했습니다.\n제목: " + approval.getTitle()
                             + "\n기안자ID: " + approval.getDrafterId();
-                    mail.send(approver.getEmail(), "[결재요청] " + approval.getTitle(), body);
+                    mailSender.send(approver.getEmail(), "[결재요청] " + approval.getTitle(), body);
                 }
                 writeAudit("APPROVAL SUBMIT", approval.getId(), userId);
             }
@@ -120,13 +123,13 @@ public class ApprovalService {
                     if (user.getRole() >= 2) {   // role 1=사원·2=팀장·3=임원 (role>=2 승인권한)  [스멜3: 숫자로 권한 판정]
                         approval.setStatus(2);        // 2 = 승인 (APPROVED)
                         approval.setUpdatedAt(LocalDateTime.now());
-                        repo.save(approval);
+                        approvalRepository.save(approval);
                         // [스멜4] 또 복붙된 메일 발송
-                        User drafter = userRepo.findById(approval.getDrafterId()).orElse(null);
+                        User drafter = userRepository.findById(approval.getDrafterId()).orElse(null);
                         if (drafter != null) {
                             String body = "안녕하세요 " + drafter.getName() + "님,\n"
                                     + "결재가 승인되었습니다.\n제목: " + approval.getTitle();
-                            mail.send(drafter.getEmail(), "[결재승인] " + approval.getTitle(), body);
+                            mailSender.send(drafter.getEmail(), "[결재승인] " + approval.getTitle(), body);
                         }
                         writeAudit("APPROVAL APPROVE", approval.getId(), userId);
                     }
@@ -140,13 +143,13 @@ public class ApprovalService {
                         approval.setStatus(3);          // 3 = 반려 (REJECTED)
                         approval.setRejectReason(reason);
                         approval.setUpdatedAt(LocalDateTime.now());
-                        repo.save(approval);
-                        User drafter = userRepo.findById(approval.getDrafterId()).orElse(null);
+                        approvalRepository.save(approval);
+                        User drafter = userRepository.findById(approval.getDrafterId()).orElse(null);
                         if (drafter != null) {
                             String body = "안녕하세요 " + drafter.getName() + "님,\n"
                                     + "결재가 반려되었습니다.\n제목: " + approval.getTitle()
                                     + "\n사유: " + reason;
-                            mail.send(drafter.getEmail(), "[결재반려] " + approval.getTitle(), body);
+                            mailSender.send(drafter.getEmail(), "[결재반려] " + approval.getTitle(), body);
                         }
                         writeAudit("APPROVAL REJECT", approval.getId(), userId);
                     }
@@ -158,7 +161,7 @@ public class ApprovalService {
                 if (approval.getDrafterId() != null && approval.getDrafterId().equals(userId)) {
                     approval.setStatus(9);   // 9 = 취소 (CANCELED)
                     approval.setUpdatedAt(LocalDateTime.now());
-                    repo.save(approval);
+                    approvalRepository.save(approval);
                     writeAudit("APPROVAL CANCEL", approval.getId(), userId);
                 }
             }
@@ -166,38 +169,39 @@ public class ApprovalService {
     }
 
     // [스멜4] 그나마 추출했지만 create() 안에는 또 복붙이 남아 있다(불완전한 중복 제거).
-    private void writeAudit(String act, Long id, Long userId) {
+    // [리팩토링·이름] 레거시 파라미터 act · id → auditAction · approvalId (감사 로그 문자열 형식은 그대로)
+    private void writeAudit(String auditAction, Long approvalId, Long userId) {
         String now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-        audit.write("[" + now + "] " + act + " id=" + id + " by=" + userId);
+        auditLogger.write("[" + now + "] " + auditAction + " id=" + approvalId + " by=" + userId);
     }
 
     // [스멜1][스멜10] 화면 표시용 문자열까지 서비스가 만든다. 주석으로 매직넘버를 변명한다.
     public String statusLabel(Approval approval) {
         int status = approval.getStatus();   // [리팩토링·이름] 레거시 s → status. 값: 0 임시저장·1 상신·2 승인·3 반려·9 취소
-        String tmp;          // tmp = 결과 라벨(반환할 상태 표시 문자열)  [스멜9: 임시? 의도가 안 드러남]
-        if (status == 0) tmp = "임시저장";       // status 0~9 를 라벨로 번역 — 이 표가 곳곳에 중복
-        else if (status == 1) tmp = "상신";
-        else if (status == 2) tmp = "승인";
-        else if (status == 3) tmp = "반려";
-        else if (status == 9) tmp = "취소";
-        else tmp = "알수없음";              // enum 이면 컴파일러가 막아줄 분기
-        return tmp;
+        String label;          // [리팩토링·이름] 레거시 tmp → label (반환할 상태 표시 문자열)
+        if (status == 0) label = "임시저장";       // status 0~9 를 라벨로 번역 — 이 표가 곳곳에 중복
+        else if (status == 1) label = "상신";
+        else if (status == 2) label = "승인";
+        else if (status == 3) label = "반려";
+        else if (status == 9) label = "취소";
+        else label = "알수없음";              // enum 이면 컴파일러가 막아줄 분기
+        return label;
     }
 
     // [스멜6] Feature Envy — Approval 데이터를 꺼내 금액 등급을 서비스가 계산.
     public String amountGrade(Approval approval) {
-        long a = approval.getAmount();   // a = amount(금액, 원)  [스멜9: 한 글자 약어]
-        if (a >= 10000000) return "S";   // [스멜3] 1000만원=S — 기준 숫자의 의미가 코드에 없음
-        else if (a >= 1000000) return "A";   // 100만원=A
-        else if (a >= 100000) return "B";    // 10만원=B
+        long amount = approval.getAmount();   // [리팩토링·이름] 레거시 a → amount (금액, 원)
+        if (amount >= 10000000) return "S";   // [스멜3] 1000만원=S — 기준 숫자의 의미가 코드에 없음
+        else if (amount >= 1000000) return "A";   // 100만원=A
+        else if (amount >= 100000) return "B";    // 10만원=B
         else return "C";
     }
 
     public List<Approval> myDrafts(Long userId) {
-        return repo.findByDrafterId(userId);
+        return approvalRepository.findByDrafterId(userId);
     }
 
     public List<Approval> myInbox(Long userId) {
-        return repo.findByApproverId(userId);
+        return approvalRepository.findByApproverId(userId);
     }
 }

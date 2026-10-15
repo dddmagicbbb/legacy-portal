@@ -27,8 +27,8 @@ Claude Code 와 함께 **진단 → 안전망(특성화 테스트) → 작은 �
 ## 1. 진행 현황
 
 ```
-[진단 01~08] ──▶ [안전망 20개] ──▶ [리팩토링 ①이름 ②enum ③라벨 위임] ──▶ (다음) B02 생성자 주입 · B04 processApproval 분해
-     완료              완료                  완료 (결재 도메인)
+[진단 01~08] ──▶ [안전망 20개] ──▶ [리팩토링 ①이름 ②enum ③라벨 위임 ④processApproval 분해] ──▶ (다음) B02 생성자 주입 · B05 중복 제거
+     완료              완료                        완료 (결재 도메인)
 ```
 
 | 구분 | 상태 | 내용 |
@@ -39,8 +39,8 @@ Claude Code 와 함께 **진단 → 안전망(특성화 테스트) → 작은 �
 | 이름 개선 (S09) | ✅ | `ApprovalService` 약어 전부 제거 · Notice/Schedule 일부 |
 | status enum (S03) | ✅ | 결재 status → `ApprovalStatus` + `AttributeConverter` (DB 정수 그대로) |
 | 라벨 위임 (S11) | ✅ | `statusLabel` 5분기 if → `ApprovalStatus.label()` |
+| `processApproval` 분해 (S02) | ✅ | guard clause 조기 반환 + submit/approve/reject/cancel 추출 · 86줄·중첩 5 → 22줄·중첩 1 (B04) |
 | 생성자 주입 (S04) | ⬜ | 다음 단계 (B02) |
-| `processApproval` 분해 (S02) | ⬜ | B04 |
 
 ---
 
@@ -273,6 +273,47 @@ kr.hull.portal
 | `20b9d34` | ② enum | Replace Magic Number with Enum (S03) | `ApprovalStatus`(DRAFT=0 · SUBMITTED=1 · APPROVED=2 · REJECTED=3 · CANCELED=9) + `AttributeConverter` |
 | `8d7a0c6` | ③ 라벨 | 조건문 → enum 소유 (S11) | `statusLabel` 의 임시변수 + 5분기 if → `ApprovalStatus.label()` 위임 |
 | `34dd3b9` | 안전망 보강 | Characterization Test | 분기 특성화 테스트 14개 · 커버리지 87.5% |
+| `25a4163` | ④ 분해 | Guard Clause · Extract Method (S02 · B04) | `processApproval` 의 조회 실패를 조기 반환, 분기를 `submit`·`approve`·`reject`·`cancel` 로 추출하고 내부 중첩 if 도 조기 반환으로 평탄화 |
+
+### `processApproval` 분해 전후
+
+```java
+// 레거시 - 한 메서드 86줄, 중첩 5단계
+if (proc == 2) {
+    if (s == 1) {
+        if (d.getApproverId() != null && d.getApproverId().equals(userId)) {
+            if (u.getRole() >= 2) {
+                d.setStatus(2); ...
+                if (drafter != null) { mail.send(...); }
+
+// 리팩토링 후 - processApproval 은 조회 가드 + 위임만
+public void processApproval(Long id, Long userId, int action, String reason) {
+    Approval approval = approvalRepository.findById(id).orElse(null);
+    if (approval == null) { return; }
+    User user = userRepository.findById(userId).orElse(null);
+    if (user == null) { return; }
+
+    if (action == 1)      { submit(approval, userId); }
+    else if (action == 2) { approve(approval, user, userId); }
+    else if (action == 3) { reject(approval, user, userId, reason); }
+    else if (action == 9) { cancel(approval, userId); }
+}
+
+private void approve(Approval approval, User user, Long userId) {
+    if (approval.approvalStatus() != ApprovalStatus.SUBMITTED) { return; }                            // 상태
+    if (approval.getApproverId() == null || !approval.getApproverId().equals(userId)) { return; }     // 당사자
+    if (user.getRole() < 2) { return; }                                                               // 권한
+    approval.changeStatus(ApprovalStatus.APPROVED); ...
+}
+```
+
+| 메서드 | 줄 수 (주석 포함 / 코드만) | 중첩 |
+|---|:---:|:---:|
+| `processApproval` | 86 / 75 → **22 / 19** | 5 → **1** |
+| `submit` · `approve` · `reject` · `cancel` | 22 · 23 · 25 · 14 (코드 19 · 21 · 23 · 13) | 1 |
+
+- 조건이 맞지 않으면 예외 없이 `return` 하는 레거시 동작, 메일 문구, 감사 로그 행위명, 처리 순서(상태 → updatedAt → save → 메일 → 로그)는 그대로다. 메일 문구는 직전 커밋과 한 줄씩 대조했다.
+- `approve` 와 `reject` 의 가드 3줄, 메서드마다 반복되는 메일 본문 조립은 아직 중복이다 - B05 에서 공통화한다.
 
 ### enum 전환에서 지킨 계약
 
@@ -361,13 +402,13 @@ public ApprovalStatus approvalStatus() { return status; }    // 서비스용 - g
 
 ## 10. 다음 단계
 
-[08 리팩토링 백로그](docs/진단/08-리팩토링-백로그.md) 순서:
+[08 리팩토링 백로그](docs/진단/08-리팩토링-백로그.md) 순서 (✅ 완료: B04 · 🔄 진행 중: B01 · B03 - 진행 상황은 백로그 2절 표):
 
 | 순서 | 항목 | 내용 |
 |:---:|---|---|
 | 1 | **B02** | `MailSender`·`AuditLogger` 인터페이스 추출 + `@Component` + 생성자 주입 (S04) |
 | 2 | B03 나머지 | action · type · priority · `UserRole` · 공지/일정 상태 enum, 금액 기준 상수 |
-| 3 | **B04** | `processApproval` 분해 - submit/approve/reject/cancel 추출 · 가드 절 (public 시그니처 유지) |
-| 4 | B05 · B06 | 감사 로그·메일 공통화 · 규칙을 도메인으로 (Rich Domain) |
-| 5 | B07 ~ B10 | 공지·일정 중첩 · DTO(record) · 매개변수 객체 · 남은 정리 |
+| 3 | **B05** | 감사 로그·메일 공통화, `approve`·`reject` 공통 가드 추출 (S05) |
+| 4 | B06 | 상태 전이·당사자 판정·금액 규칙을 도메인으로 (Rich Domain) |
+| 5 | B01 나머지 · B07 ~ B10 | 공지·일정·API 특성화 테스트 · 공지·일정 중첩 · DTO(record) · 매개변수 객체 · 남은 정리 |
 | 이후 | 재설계 | S12 조용한 실패 → 예외/결과 타입 (동작 변경 - 리팩토링 완료 후 별도 단계) |

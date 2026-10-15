@@ -3,3 +3,6 @@ target/
 .idea/
 *.log
 .tmp/
+
+# todo-guard 런타임 상태 (세션별 번호·턴 기록)
+.claude/todo-guard/

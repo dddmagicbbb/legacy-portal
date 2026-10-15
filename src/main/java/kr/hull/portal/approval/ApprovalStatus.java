@@ -8,23 +8,33 @@ package kr.hull.portal.approval;
  *  - [보존 대상] DB 저장값은 기존 정수 code 그대로다. ApprovalStatusConverter 가 enum ↔ code 를 매핑한다.
  *    @Enumerated(ORDINAL) 를 쓰면 CANCELED(9) 가 순번 4 로 저장되어 데이터가 깨지므로 code 를 명시한다.
  *  - [보존 대상] API 응답 JSON 의 status 는 계속 정수다 (Approval.getStatus() 가 code 를 반환).
+ *  - [리팩토링] 상태 라벨도 enum 이 소유한다 (label()). 상태가 늘면 상수 한 줄만 추가하면 되고, 라벨 표가 서비스마다 흩어지지 않는다.
  */
 public enum ApprovalStatus {
 
-    DRAFT(0),       // 임시저장
-    SUBMITTED(1),   // 상신
-    APPROVED(2),    // 승인
-    REJECTED(3),    // 반려
-    CANCELED(9);    // 취소 - 4~8 은 비어 있는 레거시 번호 그대로
+    // [리팩토링] 화면 라벨을 enum 이 소유 (레거시 ApprovalService.statusLabel 의 5분기 if → 상수마다 label 필드)
+    //           라벨 문자열은 레거시와 한 글자도 같게 유지한다 (보존 대상)
+    DRAFT(0, "임시저장"),
+    SUBMITTED(1, "상신"),
+    APPROVED(2, "승인"),
+    REJECTED(3, "반려"),
+    CANCELED(9, "취소");    // 4~8 은 비어 있는 레거시 번호 그대로
 
     private final int code;
+    private final String label;
 
-    ApprovalStatus(int code) {
+    ApprovalStatus(int code, String label) {
         this.code = code;
+        this.label = label;
     }
 
     public int getCode() {
         return code;
+    }
+
+    /** 화면 표시용 라벨 ("임시저장"·"상신"·"승인"·"반려"·"취소"). */
+    public String label() {
+        return label;
     }
 
     /** DB·API 의 정수 code → enum. 정의되지 않은 code 는 레거시에서 만들어지지 않는 값이라 예외로 알린다. */

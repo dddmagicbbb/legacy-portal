@@ -32,6 +32,8 @@ import java.util.List;
  *  - [보존 대상] DB 는 Converter 로 정수 그대로, API 응답·특성화 테스트는 getStatus() 정수 그대로
  *  - action(1/2/3/9)·type·role·priority 숫자는 아직 그대로 (다음 단계)
  *
+ * [리팩토링] statusLabel 의 임시변수와 5분기 if 제거 → ApprovalStatus.label() 위임 (라벨을 enum 이 소유 · S11)
+ *
  * [리팩토링] 레거시 약어 지역변수·파라미터 → 의미 있는 이름으로 (Rename Variable · 스멜9 Poor Naming 해소)
  *  - d → approval, u → user, s → status (create · processApproval · statusLabel · amountGrade)
  *  - processApproval 의 임시변수 proc 제거 → 파라미터 action 을 직접 비교
@@ -180,17 +182,14 @@ public class ApprovalService {
         auditLogger.write("[" + now + "] " + auditAction + " id=" + approvalId + " by=" + userId);
     }
 
-    // [스멜1][스멜10] 화면 표시용 문자열까지 서비스가 만든다. 주석으로 매직넘버를 변명한다.
+    // [리팩토링] 레거시: 임시변수 tmp(→label) + status 5분기 if 사슬로 라벨을 서비스가 직접 번역
+    //           → 여기서: 라벨은 ApprovalStatus 가 소유하고 statusLabel 은 enum.label() 에 위임만 한다
+    //             (Replace Conditional with Polymorphism 의 enum 판 · 표현 로직을 상태 타입으로 이동 · S11)
+    // [보존 대상] public 시그니처 statusLabel(Approval) 와 반환 문자열은 그대로.
+    //            레거시의 "알수없음" 은 상태가 없을 때(null)만 남는다 - 정의 밖 code 는 이제 Converter/fromCode 단계에서 막힌다.
     public String statusLabel(Approval approval) {
-        ApprovalStatus status = approval.approvalStatus();   // [리팩토링·enum] 레거시 int s → ApprovalStatus
-        String label;          // [리팩토링·이름] 레거시 tmp → label (반환할 상태 표시 문자열)
-        if (status == ApprovalStatus.DRAFT) label = "임시저장";       // [리팩토링·enum] 숫자 비교 → enum 비교. 라벨 문자열은 그대로(보존)
-        else if (status == ApprovalStatus.SUBMITTED) label = "상신";
-        else if (status == ApprovalStatus.APPROVED) label = "승인";
-        else if (status == ApprovalStatus.REJECTED) label = "반려";
-        else if (status == ApprovalStatus.CANCELED) label = "취소";
-        else label = "알수없음";              // enum 이면 컴파일러가 막아줄 분기
-        return label;
+        ApprovalStatus status = approval.approvalStatus();
+        return status == null ? "알수없음" : status.label();
     }
 
     // [스멜6] Feature Envy — Approval 데이터를 꺼내 금액 등급을 서비스가 계산.

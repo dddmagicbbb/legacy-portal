@@ -27,6 +27,11 @@ import java.util.List;
  * 11. No Tests             : 테스트가 단 한 개도 없다(안전망 부재).
  * =================================================================================
  *
+ * [리팩토링] 레거시 status 매직넘버 0/1/2/3/9 → ApprovalStatus enum 비교로 (Replace Magic Number with Enum · S03)
+ *  - processApproval·create·statusLabel 의 status 숫자 비교·대입을 enum 상수로 바꿨다. 분기 구조·조건·동작은 그대로
+ *  - [보존 대상] DB 는 Converter 로 정수 그대로, API 응답·특성화 테스트는 getStatus() 정수 그대로
+ *  - action(1/2/3/9)·type·role·priority 숫자는 아직 그대로 (다음 단계)
+ *
  * [리팩토링] 레거시 약어 지역변수·파라미터 → 의미 있는 이름으로 (Rename Variable · 스멜9 Poor Naming 해소)
  *  - d → approval, u → user, s → status (create · processApproval · statusLabel · amountGrade)
  *  - processApproval 의 임시변수 proc 제거 → 파라미터 action 을 직접 비교
@@ -59,7 +64,7 @@ public class ApprovalService {
         approval.setContent(content);
         approval.setType(type);
         approval.setPriority(urgent ? 3 : priority);   // priority(우선순위): 1 낮음·2 보통·3 높음  [스멜3: 3=높음, 왜 3이 높음? 코드만 봐선 모름]
-        approval.setStatus(0);                          // status(상태): 0 임시저장·1 상신·2 승인·3 반려·9 취소  [스멜3: 0=임시저장, DRAFT 대신 숫자 0]
+        approval.changeStatus(ApprovalStatus.DRAFT);    // [리팩토링·enum] 레거시 setStatus(0) → DRAFT (DB 엔 0 그대로)
         approval.setDrafterId(drafterId);
         approval.setApproverId(approverId);
         approval.setAmount(amount);
@@ -92,18 +97,18 @@ public class ApprovalService {
             return;
         }
 
-        int status = approval.getStatus();     // [리팩토링·이름] 레거시 s → status. 값: 0 임시저장·1 상신·2 승인·3 반려·9 취소 (매직넘버는 B03 에서 enum 화)
+        ApprovalStatus status = approval.approvalStatus();     // [리팩토링·enum] 레거시 int s → ApprovalStatus status
         // [리팩토링·이름] 레거시 int proc = action; 임시변수 제거 → 파라미터 action 을 직접 사용 (같은 값을 다른 약어로 복사할 이유 없음)
 
         // [스멜2][스멜3] 거대한 if-지옥. 상태 전이 규칙이 숫자 비교로 흩어져 있다.
         if (action == 1) {            // action==1 → 상신 (숫자 1을 외워야 의미를 앎)
             // 상신: 임시저장(0)일 때만 가능
-            if (status == 0) {           // status==0 → 임시저장 상태일 때만
+            if (status == ApprovalStatus.DRAFT) {           // [리팩토링·enum] 레거시 s==0 → DRAFT(임시저장)일 때만
                 // [스멜6] 금액 기준 결재자 자동 상향 — 도메인 규칙이 서비스에 박혀 있다.
                 if (approval.getType() == 1 && approval.getAmount() >= 1000000) {   // type 1=지출·2=휴가·3=구매·4=기타 → type==1(지출) && 100만원↑
                     approval.setPriority(3);   // 3 = 높음
                 }
-                approval.setStatus(1);   // 1 = 상신 (SUBMITTED)
+                approval.changeStatus(ApprovalStatus.SUBMITTED);   // [리팩토링·enum] 레거시 setStatus(1)
                 approval.setUpdatedAt(LocalDateTime.now());
                 approvalRepository.save(approval);
                 // [스멜4] 메일 발송 — 본문 생성 로직이 곳곳에 복붙.
@@ -118,10 +123,10 @@ public class ApprovalService {
             }
         } else if (action == 2) {     // action==2 → 승인
             // 승인: 상신(1) 상태 + 본인이 결재자 + 권한(role>=2) 일 때만
-            if (status == 1) {           // status==1 → 상신 상태일 때만 승인 가능
+            if (status == ApprovalStatus.SUBMITTED) {           // [리팩토링·enum] 레거시 s==1 → 상신 상태일 때만 승인 가능
                 if (approval.getApproverId() != null && approval.getApproverId().equals(userId)) {
                     if (user.getRole() >= 2) {   // role 1=사원·2=팀장·3=임원 (role>=2 승인권한)  [스멜3: 숫자로 권한 판정]
-                        approval.setStatus(2);        // 2 = 승인 (APPROVED)
+                        approval.changeStatus(ApprovalStatus.APPROVED);        // [리팩토링·enum] 레거시 setStatus(2)
                         approval.setUpdatedAt(LocalDateTime.now());
                         approvalRepository.save(approval);
                         // [스멜4] 또 복붙된 메일 발송
@@ -137,10 +142,10 @@ public class ApprovalService {
             }
         } else if (action == 3) {     // action==3 → 반려
             // 반려
-            if (status == 1) {           // status==1 → 상신 상태만 반려 가능
+            if (status == ApprovalStatus.SUBMITTED) {           // [리팩토링·enum] 레거시 s==1 → 상신 상태만 반려 가능
                 if (approval.getApproverId() != null && approval.getApproverId().equals(userId)) {
                     if (user.getRole() >= 2) {   // role>=2 → 팀장 이상 (위 승인 분기와 똑같은 판정 복붙)
-                        approval.setStatus(3);          // 3 = 반려 (REJECTED)
+                        approval.changeStatus(ApprovalStatus.REJECTED);          // [리팩토링·enum] 레거시 setStatus(3)
                         approval.setRejectReason(reason);
                         approval.setUpdatedAt(LocalDateTime.now());
                         approvalRepository.save(approval);
@@ -157,9 +162,9 @@ public class ApprovalService {
             }
         } else if (action == 9) {     // action==9 → 취소 (왜 9? 4~8 은 비워둔 규칙 없는 번호)
             // 취소: 기안자 본인 + 아직 승인 전(0 또는 1)
-            if (status == 0 || status == 1) {     // status==0(임시저장) 또는 status==1(상신)일 때만
+            if (status == ApprovalStatus.DRAFT || status == ApprovalStatus.SUBMITTED) {     // [리팩토링·enum] 레거시 s==0 || s==1 → 임시저장 또는 상신일 때만
                 if (approval.getDrafterId() != null && approval.getDrafterId().equals(userId)) {
-                    approval.setStatus(9);   // 9 = 취소 (CANCELED)
+                    approval.changeStatus(ApprovalStatus.CANCELED);   // [리팩토링·enum] 레거시 setStatus(9)
                     approval.setUpdatedAt(LocalDateTime.now());
                     approvalRepository.save(approval);
                     writeAudit("APPROVAL CANCEL", approval.getId(), userId);
@@ -177,13 +182,13 @@ public class ApprovalService {
 
     // [스멜1][스멜10] 화면 표시용 문자열까지 서비스가 만든다. 주석으로 매직넘버를 변명한다.
     public String statusLabel(Approval approval) {
-        int status = approval.getStatus();   // [리팩토링·이름] 레거시 s → status. 값: 0 임시저장·1 상신·2 승인·3 반려·9 취소
+        ApprovalStatus status = approval.approvalStatus();   // [리팩토링·enum] 레거시 int s → ApprovalStatus
         String label;          // [리팩토링·이름] 레거시 tmp → label (반환할 상태 표시 문자열)
-        if (status == 0) label = "임시저장";       // status 0~9 를 라벨로 번역 — 이 표가 곳곳에 중복
-        else if (status == 1) label = "상신";
-        else if (status == 2) label = "승인";
-        else if (status == 3) label = "반려";
-        else if (status == 9) label = "취소";
+        if (status == ApprovalStatus.DRAFT) label = "임시저장";       // [리팩토링·enum] 숫자 비교 → enum 비교. 라벨 문자열은 그대로(보존)
+        else if (status == ApprovalStatus.SUBMITTED) label = "상신";
+        else if (status == ApprovalStatus.APPROVED) label = "승인";
+        else if (status == ApprovalStatus.REJECTED) label = "반려";
+        else if (status == ApprovalStatus.CANCELED) label = "취소";
         else label = "알수없음";              // enum 이면 컴파일러가 막아줄 분기
         return label;
     }

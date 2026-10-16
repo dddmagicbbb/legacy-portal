@@ -178,9 +178,8 @@ public class ApprovalService {
         // [스멜4] 또 복붙된 메일 발송
         User drafter = userRepository.findById(approval.getDrafterId()).orElse(null);
         if (drafter != null) {
-            String body = "안녕하세요 " + drafter.getName() + "님,\n"
-                    + "결재가 승인되었습니다.\n제목: " + approval.getTitle();
-            mailSender.send(drafter.getEmail(), "[결재승인] " + approval.getTitle(), body);
+            // [리팩토링·Extract Method] 레거시 본문 문자열 조립 2줄 → approvedBody (문구는 그대로)
+            mailSender.send(drafter.getEmail(), "[결재승인] " + approval.getTitle(), approvedBody(drafter, approval));
         }
         writeAudit("APPROVAL APPROVE", approval.getId(), userId);
     }
@@ -204,12 +203,27 @@ public class ApprovalService {
         approvalRepository.save(approval);
         User drafter = userRepository.findById(approval.getDrafterId()).orElse(null);
         if (drafter != null) {
-            String body = "안녕하세요 " + drafter.getName() + "님,\n"
-                    + "결재가 반려되었습니다.\n제목: " + approval.getTitle()
-                    + "\n사유: " + reason;
-            mailSender.send(drafter.getEmail(), "[결재반려] " + approval.getTitle(), body);
+            // [리팩토링·Extract Method] 레거시 본문 문자열 조립 3줄 → rejectedBody (문구는 그대로)
+            mailSender.send(drafter.getEmail(), "[결재반려] " + approval.getTitle(), rejectedBody(drafter, approval, reason));
         }
         writeAudit("APPROVAL REJECT", approval.getId(), userId);
+    }
+
+    // [리팩토링·Extract Method] approve·reject 안의 긴 메일 본문 조립을 이름 있는 private 메서드로 추출.
+    //   - 메서드 이름이 "무슨 메일인지"를 말해 주고, approve·reject 는 처리 흐름만 읽히게 된다
+    //   - [보존 대상] 본문 문구·줄바꿈은 레거시와 한 글자도 같다 (서비스 private 유지 - 공통 템플릿화는 B05)
+
+    /** 승인 메일 본문 - 기안자에게. */
+    private String approvedBody(User drafter, Approval approval) {
+        return "안녕하세요 " + drafter.getName() + "님,\n"
+                + "결재가 승인되었습니다.\n제목: " + approval.getTitle();
+    }
+
+    /** 반려 메일 본문 - 기안자에게, 반려 사유 포함. */
+    private String rejectedBody(User drafter, Approval approval, String reason) {
+        return "안녕하세요 " + drafter.getName() + "님,\n"
+                + "결재가 반려되었습니다.\n제목: " + approval.getTitle()
+                + "\n사유: " + reason;
     }
 
     /** 취소(action 9): 임시저장 또는 상신 상태 · 요청자 = 기안자일 때만. 메일은 보내지 않는다. */

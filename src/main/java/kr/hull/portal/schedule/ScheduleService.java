@@ -6,7 +6,6 @@ import kr.hull.portal.user.UserRepository;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 
 /**
  * 일정 서비스.
@@ -15,6 +14,7 @@ import java.time.format.DateTimeFormatter;
  * [리팩토링] 레거시 약어 지역변수 → 의미 있는 이름 (Rename Variable · 스멜9): confirm 의 u → user.
  *            create 루프의 s 는 상태값이 아니라 일정 객체라 status 로 바꾸지 않았다 (sc · flag1 과 함께 다음 단계에서 정리).
  * [리팩토링] 감사 로거 직접 new → AuditLogger 생성자 주입 (DIP · S04 · B02). 로그 문자열은 그대로.
+ * [리팩토링] 감사 로그 포맷 직접 조립 2곳 → AuditLogger.write(action, id, userId) 위임 (중복 제거 E1 · B05). 결과 문자열은 그대로.
  */
 @Service
 public class ScheduleService {
@@ -65,8 +65,8 @@ public class ScheduleService {
         repo.save(sc);
 
         // [스멜4] 또 복붙된 감사 로그.
-        String now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-        auditLogger.write("[" + now + "] SCHEDULE CREATE id=" + sc.getId() + " by=" + ownerId);
+        // [리팩토링·중복 제거] 레거시 시각 포맷 + 문자열 조립 2줄 → AuditLogger.write(action, id, userId) 위임 (포맷은 구현체 한 곳 · B05)
+        auditLogger.write("SCHEDULE CREATE", sc.getId(), ownerId);
         return sc;
     }
 
@@ -79,8 +79,8 @@ public class ScheduleService {
             if (sc.getStatus() == 0) {          // status==0 → 예정 상태일 때만
                 sc.setStatus(1);   // 1 = 확정 (CONFIRMED)
                 repo.save(sc);
-                String now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-                auditLogger.write("[" + now + "] SCHEDULE CONFIRM id=" + sc.getId() + " by=" + userId);
+                // [리팩토링·중복 제거] 감사 로그 포맷은 AuditLogger 구현체가 만든다 (B05)
+                auditLogger.write("SCHEDULE CONFIRM", sc.getId(), userId);
             }
         }
     }

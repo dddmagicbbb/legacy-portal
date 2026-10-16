@@ -11,7 +11,6 @@ import kr.hull.portal.user.UserRepository;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
@@ -54,6 +53,8 @@ import java.util.List;
  * [리팩토링] 패키지 이동: kr.hull.portal.approval → kr.hull.portal.approval.service (애플리케이션(서비스) 계층)
  *  - 계층별 하위 패키지로 나눠 클래스의 역할이 패키지 이름에서 드러나게 했다 (Move Class)
  *  - [보존 대상] 클래스명·public 메서드·엔드포인트·DB 저장값은 그대로. package·import 줄만 바뀌었다
+ *
+ * [리팩토링] 감사 로그 포맷 직접 조립(create + private writeAudit) → AuditLogger.write(action, id, userId[, detail]) 위임 (E1·E2 · B05)
  */
 @Service
 public class ApprovalService {
@@ -92,11 +93,9 @@ public class ApprovalService {
         approval.setUpdatedAt(LocalDateTime.now());
         approvalRepository.save(approval);
 
-        // [스멜4] 감사 로그 기록 — 이 6줄이 submit/approve/reject/cancel 에도 복붙 되어 있다.
-        String now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-        String auditLine = "[" + now + "] APPROVAL CREATE id=" + approval.getId()
-                + " by=" + drafterId + " type=" + approval.getType();
-        auditLogger.write(auditLine);
+        // [리팩토링·중복 제거] 레거시: 시각 포맷 + "[시각] APPROVAL CREATE id=… by=… type=…" 를 여기서 직접 조립 (E1·E2)
+        //                    → 포맷은 AuditLogger 구현(ConsoleAuditLogger) 한 곳에. 생성 로그만 있던 " type=…" 꼬리는 detail 로 보존
+        auditLogger.write("APPROVAL CREATE", approval.getId(), drafterId, "type=" + approval.getType());
         return approval;
     }
 
@@ -155,7 +154,7 @@ public class ApprovalService {
             // [리팩토링·Extract Method] 레거시 본문 문자열 조립 3줄 → submittedBody (문구는 그대로)
             mailSender.send(approver.getEmail(), "[결재요청] " + approval.getTitle(), submittedBody(approver, approval));
         }
-        writeAudit("APPROVAL SUBMIT", approval.getId(), userId);
+        auditLogger.write("APPROVAL SUBMIT", approval.getId(), userId);
     }
 
     /** 승인(action 2): 상신 상태 · 요청자 = 결재자 · 팀장 이상일 때만. */
@@ -179,7 +178,7 @@ public class ApprovalService {
             // [리팩토링·Extract Method] 레거시 본문 문자열 조립 2줄 → approvedBody (문구는 그대로)
             mailSender.send(drafter.getEmail(), "[결재승인] " + approval.getTitle(), approvedBody(drafter, approval));
         }
-        writeAudit("APPROVAL APPROVE", approval.getId(), userId);
+        auditLogger.write("APPROVAL APPROVE", approval.getId(), userId);
     }
 
     /** 반려(action 3): 승인과 같은 조건 + 반려 사유 저장. */
@@ -204,7 +203,7 @@ public class ApprovalService {
             // [리팩토링·Extract Method] 레거시 본문 문자열 조립 3줄 → rejectedBody (문구는 그대로)
             mailSender.send(drafter.getEmail(), "[결재반려] " + approval.getTitle(), rejectedBody(drafter, approval, reason));
         }
-        writeAudit("APPROVAL REJECT", approval.getId(), userId);
+        auditLogger.write("APPROVAL REJECT", approval.getId(), userId);
     }
 
     // [리팩토링·Extract Method] submit·approve·reject 안의 긴 메일 본문 조립을 이름 있는 private 메서드로 추출.
@@ -244,15 +243,11 @@ public class ApprovalService {
         approval.changeStatus(ApprovalStatus.CANCELED);
         approval.setUpdatedAt(LocalDateTime.now());
         approvalRepository.save(approval);
-        writeAudit("APPROVAL CANCEL", approval.getId(), userId);
+        auditLogger.write("APPROVAL CANCEL", approval.getId(), userId);
     }
 
-    // [스멜4] 그나마 추출했지만 create() 안에는 또 복붙이 남아 있다(불완전한 중복 제거).
-    // [리팩토링·이름] 레거시 파라미터 act · id → auditAction · approvalId (감사 로그 문자열 형식은 그대로)
-    private void writeAudit(String auditAction, Long approvalId, Long userId) {
-        String now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-        auditLogger.write("[" + now + "] " + auditAction + " id=" + approvalId + " by=" + userId);
-    }
+    // [리팩토링·중복 제거] 레거시 private writeAudit(act, id, userId) 삭제 - 시각 포맷·문자열 조립이 AuditLogger 구현으로 옮겨 가
+    //                    서비스에 남길 일이 없다. 호출부는 auditLogger.write(action, id, userId) 를 직접 부른다 (B05)
 
     // [리팩토링] 레거시: 임시변수 tmp(→label) + status 5분기 if 사슬로 라벨을 서비스가 직접 번역
     //           → 여기서: 라벨은 ApprovalStatus 가 소유하고 statusLabel 은 enum.label() 에 위임만 한다

@@ -7,7 +7,6 @@ import kr.hull.portal.user.UserRepository;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 
 /**
  * 공지 서비스.
@@ -18,6 +17,7 @@ import java.time.format.DateTimeFormatter;
  * [리팩토링] 레거시 약어 지역변수 → 의미 있는 이름 (Rename Variable · 스멜9): publish 의 u → user, statusLabel 의 s → status.
  *            이름만 바꿨고 동작은 그대로. 공지 객체 n 은 다음 단계에서 정리.
  * [리팩토링] 메일·감사 로거 직접 new → MailSender · AuditLogger 생성자 주입 (DIP · S04 · B02). 출력 내용·발송 조건은 그대로.
+ * [리팩토링] 감사 로그 포맷 직접 조립 2곳 → AuditLogger.write(action, id, userId) 위임 (중복 제거 E1 · B05). 결과 문자열은 그대로.
  */
 @Service
 public class NoticeService {
@@ -50,8 +50,8 @@ public class NoticeService {
         repo.save(n);
 
         // [스멜4] ApprovalService.create() 와 사실상 동일한 감사 로그 코드(복붙).
-        String now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-        auditLogger.write("[" + now + "] NOTICE CREATE id=" + n.getId() + " by=" + writerId);
+        // [리팩토링·중복 제거] 레거시 시각 포맷 + 문자열 조립 2줄 → AuditLogger.write(action, id, userId) 위임 (포맷은 구현체 한 곳 · B05)
+        auditLogger.write("NOTICE CREATE", n.getId(), writerId);
         return n;
     }
 
@@ -75,8 +75,8 @@ public class NoticeService {
                         mailSender.send(member.getEmail(), "[긴급공지] " + n.getTitle(), body);
                     }
                 }
-                String now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-                auditLogger.write("[" + now + "] NOTICE PUBLISH id=" + n.getId() + " by=" + userId);
+                // [리팩토링·중복 제거] 감사 로그 포맷은 AuditLogger 구현체가 만든다 (B05)
+                auditLogger.write("NOTICE PUBLISH", n.getId(), userId);
             }
         }
     }

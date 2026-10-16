@@ -27,8 +27,8 @@ Claude Code 와 함께 **진단 → 안전망(특성화 테스트) → 작은 �
 ## 1. 진행 현황
 
 ```
-[진단 01~08] ──▶ [안전망 33개] ──▶ [리팩토링 ①이름 ②enum ③라벨 위임 ④분해 ⑤생성자 주입 ⑥계층 패키지] ──▶ (다음) B03 나머지 · B05 중복 제거
-     완료              완료                              완료 (결재 도메인)
+[진단 01~08] ──▶ [안전망 33개] ──▶ [리팩토링 ①이름 ②enum ③라벨 위임 ④분해 ⑤생성자 주입 ⑥계층 패키지 ⑦DTO] ──▶ (다음) B03 나머지 · B05 중복 제거
+     완료              완료                                  완료 (결재 도메인)
 ```
 
 | 구분 | 상태 | 내용 |
@@ -42,6 +42,8 @@ Claude Code 와 함께 **진단 → 안전망(특성화 테스트) → 작은 �
 | `processApproval` 분해 (S02) | ✅ | guard clause 조기 반환 + submit/approve/reject/cancel 추출 · 86줄·중첩 5 → 22줄·중첩 1 (B04) |
 | 생성자 주입 (S04) | ✅ | 메일·감사 로거 직접 `new` 5곳 → `MailSender`·`AuditLogger` 인터페이스 주입 (B02) |
 | 계층별 패키지 | ✅ | `approval` → `controller` · `service` · `domain` · `repository` 하위 패키지 (Move Class) |
+| 요청/응답 DTO (S07) | ✅ | `Map` 요청·엔티티 응답 → `CreateApprovalRequest`·`ProcessRequest`·`ApprovalResponse` record (B08) |
+| 동작 보존 확인 | ✅ | 위 리팩토링 전부 거친 뒤 `./mvnw test` 33개 green - 테스트 본문은 컴파일용 import·`@Import` 줄 외 무수정 |
 
 ---
 
@@ -174,6 +176,7 @@ curl localhost:8080/api/approvals/inbox/2
 kr.hull.portal
 ├── approval/              결재 - 계층별 하위 패키지
 │   ├── controller/        ApprovalController            표현(Web/API)
+│   ├── dto/               CreateApprovalRequest · ProcessRequest · ApprovalResponse   요청/응답 record (엔티티 비노출)
 │   ├── service/           ApprovalService               애플리케이션(서비스)
 │   ├── domain/            Approval · ApprovalStatus · ApprovalStatusConverter   도메인(엔티티·값 타입·DB 매핑)
 │   └── repository/        ApprovalRepository            영속성(저장소)
@@ -289,6 +292,7 @@ kr.hull.portal
 | `1b0894d` | ⑤ 주입 | Extract Interface · Constructor Injection (S04 · B02) | `MailSender`·`AuditLogger` 인터페이스 추출, 구현은 `@Component`, 세 서비스의 직접 `new` 5곳 → 생성자 주입. 테스트는 `@Import` 줄만 조정(확인받음) |
 | `5c9e1b2` | 안전망 보강 | Characterization Test | 메일·감사 로그 5개 + API JSON(MockMvc) 8개 → 전체 33개 |
 | `b94d574` | ⑥ 계층 패키지 | Move Class | `approval` 6개 클래스를 `controller`·`service`·`domain`·`repository` 로 이동. package·import 만 변경, 테스트는 import 줄 추가만 |
+| `9385535` | ⑦ DTO | Introduce Parameter Object · Replace Entity with DTO (S07 · B08) | 요청 `Map<String,Object>` → `CreateApprovalRequest`·`ProcessRequest`, 응답 엔티티 → `ApprovalResponse`. 생략 기본값은 compact 생성자(amount 0 · urgent false · reason `""`), 필수 필드는 래퍼 타입이라 누락 시 레거시처럼 500 |
 
 ### `processApproval` 분해 전후
 
@@ -329,6 +333,36 @@ private void approve(Approval approval, User user, Long userId) {
 
 - 조건이 맞지 않으면 예외 없이 `return` 하는 레거시 동작, 메일 문구, 감사 로그 행위명, 처리 순서(상태 → updatedAt → save → 메일 → 로그)는 그대로다. 메일 문구는 직전 커밋과 한 줄씩 대조했다.
 - `approve` 와 `reject` 의 가드 3줄, 메서드마다 반복되는 메일 본문 조립은 아직 중복이다 - B05 에서 공통화한다.
+
+### DTO 전환에서 지킨 계약
+
+```java
+// 레거시 - Map 캐스팅, 엔티티를 그대로 응답
+public Approval create(@RequestBody Map<String, Object> body) {
+    return service.create((String) body.get("title"), ..., (int) body.get("type"), ...,
+            ((Number) body.getOrDefault("amount", 0)).longValue(), (boolean) body.getOrDefault("urgent", false));
+}
+
+// 리팩토링 후 - record 요청 · 응답 전용 record
+public ApprovalResponse create(@RequestBody CreateApprovalRequest request) {
+    return ApprovalResponse.from(service.create(request.title(), ..., request.amount(), request.urgent()));
+}
+
+public record ProcessRequest(Long userId, Integer action, String reason) {
+    public ProcessRequest {
+        if (reason == null) { reason = ""; }   // 레거시 getOrDefault("reason", "")
+    }
+}
+```
+
+| 확인 항목 | 결과 |
+|---|---|
+| 특성화 테스트 | 33개 green, 테스트 파일 무수정 (API 8개가 응답 필드·순서·정수 코드·기본값을 고정) |
+| 이전 코드와 HTTP 응답 비교 | 이전 코드(`3fc64a8`, :8081)와 새 코드(:8080)에 같은 요청 11건 - 생성 3 · 처리 4 · 목록 2 는 **바이트 단위 동일** |
+| 오류 경계 | `type`·`action` 누락 → 둘 다 **500** (같은 NullPointerException, 트레이스의 위치 문구만 다름) |
+| 서비스 시그니처 | 변경 없음 - 컨트롤러가 DTO 를 풀어서 기존 메서드 호출 |
+
+> **잘못된 입력에서의 미세한 차이:** `"reason": null` 을 명시하면 레거시는 `null`, 지금은 `""` 로 저장한다(compact 생성자). `"type": "1"`·`1.5` 처럼 형식이 틀린 숫자는 레거시가 캐스팅 오류 500 이었지만 지금은 Jackson 이 숫자로 받아들일 수 있다. 화면(`index.html`)의 정상 요청에는 영향이 없다.
 
 ### enum 전환에서 지킨 계약
 
@@ -417,13 +451,13 @@ public ApprovalStatus approvalStatus() { return status; }    // 서비스용 - g
 
 ## 10. 다음 단계
 
-[08 리팩토링 백로그](docs/진단/08-리팩토링-백로그.md) 순서 (✅ 완료: B02 · B04 · 🔄 진행 중: B01 · B03 - 진행 상황은 백로그 2절 표):
+[08 리팩토링 백로그](docs/진단/08-리팩토링-백로그.md) 순서 (✅ 완료: B02 · B04 · B08 · 🔄 진행 중: B01 · B03 - 진행 상황은 백로그 2절 표):
 
 | 순서 | 항목 | 내용 |
 |:---:|---|---|
 | 1 | B03 나머지 | action · type · priority · `UserRole` · 공지/일정 상태 enum, 금액 기준 상수 |
 | 2 | **B05** | 감사 로그·메일 공통화, `approve`·`reject` 공통 가드 추출 (S05) - 메일·로그 특성화 테스트가 생겨 안전하게 진행 가능 |
 | 3 | B06 | 상태 전이·당사자 판정·금액 규칙을 도메인으로 (Rich Domain) |
-| 4 | **B08** | 요청/응답 DTO(record) 분리 - 선행 조건인 API 특성화 테스트(B01-5) 완료 |
-| 5 | B01 나머지 · B07 · B09 · B10 | 공지·일정 특성화 테스트 · 공지·일정 중첩·계층 패키지 · 매개변수 객체 · 남은 정리 |
+| 4 | B09 | `create` 파라미터 8개 → 매개변수 객체 (public 시그니처 유지, `CreateApprovalRequest` 재사용 검토) |
+| 5 | B01 나머지 · B07 · B10 | 공지·일정 특성화 테스트 · 공지·일정 중첩·계층 패키지 · 남은 정리 |
 | 이후 | 재설계 | S12 조용한 실패 → 예외/결과 타입 (동작 변경 - 리팩토링 완료 후 별도 단계) |

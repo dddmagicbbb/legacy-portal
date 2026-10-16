@@ -1,10 +1,11 @@
 package kr.hull.portal.approval.controller;
 
-import kr.hull.portal.approval.domain.Approval;
+import kr.hull.portal.approval.dto.ApprovalResponse;
+import kr.hull.portal.approval.dto.CreateApprovalRequest;
+import kr.hull.portal.approval.dto.ProcessRequest;
 import kr.hull.portal.approval.service.ApprovalService;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
-import java.util.Map;
 
 /**
  * 결재 REST 컨트롤러.
@@ -14,6 +15,12 @@ import java.util.Map;
  * [리팩토링] 패키지 이동: kr.hull.portal.approval → kr.hull.portal.approval.controller (표현(Web/API) 계층)
  *  - 계층별 하위 패키지로 나눠 클래스의 역할이 패키지 이름에서 드러나게 했다 (Move Class)
  *  - [보존 대상] 클래스명·public 메서드·엔드포인트·DB 저장값은 그대로. package·import 줄만 바뀌었다
+ *
+ * [리팩토링] 레거시 Map&lt;String, Object&gt; 요청 · 엔티티 응답 → record DTO (Introduce Parameter Object · S07 · B08)
+ *  - 요청: CreateApprovalRequest · ProcessRequest, 응답: ApprovalResponse (JPA 엔티티를 API 에 노출하지 않는다)
+ *  - [보존 대상] URL·HTTP 메서드·요청/응답 JSON 필드명·순서·정수 status·생략 시 기본값은 레거시와 같다
+ *    (ApprovalApiCharacterizationTest 8개가 고정)
+ *  - 서비스의 public 시그니처는 그대로 - 컨트롤러가 DTO 를 풀어서 기존 메서드를 호출한다
  */
 @RestController
 @RequestMapping("/api/approvals")
@@ -26,37 +33,40 @@ public class ApprovalController {
     }
 
     @PostMapping
-    public Approval create(@RequestBody Map<String, Object> body) {
-        return service.create(
-                (String) body.get("title"),
-                (String) body.get("content"),
-                (int) body.get("type"),       // type: 1=지출 2=휴가 3=구매 4=기타 — 요청자가 숫자 뜻을 외워야 함
-                (int) body.get("priority"),   // priority: 1=낮음 2=보통 3=높음 — 잘못된 값(5 등)도 그냥 통과
-                ((Number) body.get("drafterId")).longValue(),   // "drafterId"는 그냥 문자열이라 철자가 틀려도 컴파일은 됨 → 실행 때 null 로 터짐(DTO면 컴파일러가 즉시 잡아줌)
-                ((Number) body.get("approverId")).longValue(),
-                ((Number) body.getOrDefault("amount", 0)).longValue(),
-                (boolean) body.getOrDefault("urgent", false)
-        );
+    public ApprovalResponse create(@RequestBody CreateApprovalRequest request) {
+        // [리팩토링·DTO] 레거시 (int) body.get("type") 등 캐스팅 8줄 → record 접근자.
+        //               type·priority·drafterId·approverId 가 빠지면 레거시처럼 여기서 실패(500)한다 (자동 언박싱)
+        return ApprovalResponse.from(service.create(
+                request.title(),
+                request.content(),
+                request.type(),        // type: 1=지출 2=휴가 3=구매 4=기타
+                request.priority(),    // priority: 1=낮음 2=보통 3=높음 — 범위 밖 값도 레거시처럼 그대로 통과
+                request.drafterId(),
+                request.approverId(),
+                request.amount(),      // 생략 시 0 (CreateApprovalRequest compact 생성자)
+                request.urgent()       // 생략 시 false
+        ));
     }
 
-    // action: 1=상신, 2=승인, 3=반려, 9=취소  ([스멜] 매직넘버를 API 가 그대로 강요)
+    // action: 1=상신, 2=승인, 3=반려, 9=취소  ([스멜] 매직넘버를 API 가 그대로 강요 - enum 화는 다음 단계)
     @PostMapping("/{id}/process")
-    public void process(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+    public void process(@PathVariable Long id, @RequestBody ProcessRequest request) {
         service.processApproval(
                 id,
-                ((Number) body.get("userId")).longValue(),
-                (int) body.get("action"),     // 1=상신 2=승인 3=반려 9=취소 — 요청자(프론트엔드)가 숫자를 외워야 함
-                (String) body.getOrDefault("reason", "")   // reason 키를 안 보내면 빈 문자열, 반려 사유 누락도 통과
+                request.userId(),
+                request.action(),
+                request.reason()       // 생략 시 "" (ProcessRequest compact 생성자) - 레거시 getOrDefault("reason", "")
         );
     }
 
     @GetMapping("/drafts/{userId}")
-    public List<Approval> drafts(@PathVariable Long userId) {
-        return service.myDrafts(userId);
+    public List<ApprovalResponse> drafts(@PathVariable Long userId) {
+        // [리팩토링·DTO] 엔티티 목록 → 응답 record 목록 (JSON 은 동일)
+        return service.myDrafts(userId).stream().map(ApprovalResponse::from).toList();
     }
 
     @GetMapping("/inbox/{userId}")
-    public List<Approval> inbox(@PathVariable Long userId) {
-        return service.myInbox(userId);
+    public List<ApprovalResponse> inbox(@PathVariable Long userId) {
+        return service.myInbox(userId).stream().map(ApprovalResponse::from).toList();
     }
 }

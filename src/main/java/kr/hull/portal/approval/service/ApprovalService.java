@@ -152,10 +152,8 @@ public class ApprovalService {
         // [스멜4] 메일 발송 — 본문 생성 로직이 곳곳에 복붙 (B05 에서 공통화)
         User approver = userRepository.findById(approval.getApproverId()).orElse(null);
         if (approver != null) {
-            String body = "안녕하세요 " + approver.getName() + "님,\n"
-                    + "결재 요청이 도착했습니다.\n제목: " + approval.getTitle()
-                    + "\n기안자ID: " + approval.getDrafterId();
-            mailSender.send(approver.getEmail(), "[결재요청] " + approval.getTitle(), body);
+            // [리팩토링·Extract Method] 레거시 본문 문자열 조립 3줄 → submittedBody (문구는 그대로)
+            mailSender.send(approver.getEmail(), "[결재요청] " + approval.getTitle(), submittedBody(approver, approval));
         }
         writeAudit("APPROVAL SUBMIT", approval.getId(), userId);
     }
@@ -209,9 +207,16 @@ public class ApprovalService {
         writeAudit("APPROVAL REJECT", approval.getId(), userId);
     }
 
-    // [리팩토링·Extract Method] approve·reject 안의 긴 메일 본문 조립을 이름 있는 private 메서드로 추출.
-    //   - 메서드 이름이 "무슨 메일인지"를 말해 주고, approve·reject 는 처리 흐름만 읽히게 된다
+    // [리팩토링·Extract Method] submit·approve·reject 안의 긴 메일 본문 조립을 이름 있는 private 메서드로 추출.
+    //   - 메서드 이름이 "무슨 메일인지"를 말해 주고, submit·approve·reject 는 처리 흐름만 읽히게 된다
     //   - [보존 대상] 본문 문구·줄바꿈은 레거시와 한 글자도 같다 (서비스 private 유지 - 공통 템플릿화는 B05)
+
+    /** 결재 요청 메일 본문 - 결재자에게, 기안자 id 포함. */
+    private String submittedBody(User approver, Approval approval) {
+        return "안녕하세요 " + approver.getName() + "님,\n"
+                + "결재 요청이 도착했습니다.\n제목: " + approval.getTitle()
+                + "\n기안자ID: " + approval.getDrafterId();
+    }
 
     /** 승인 메일 본문 - 기안자에게. */
     private String approvedBody(User drafter, Approval approval) {

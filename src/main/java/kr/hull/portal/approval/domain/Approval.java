@@ -1,4 +1,4 @@
-package kr.hull.portal.approval;
+package kr.hull.portal.approval.domain;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
@@ -18,6 +18,10 @@ import java.time.LocalDateTime;
  *  - [보존 대상] getStatus()/setStatus(int) 는 정수 계약 그대로 - 응답 JSON 의 status 숫자와 특성화 테스트가 이 계약에 의존
  *  - 서비스는 approvalStatus()/changeStatus(enum) 로 enum 비교. get 접두가 없어 JSON 에 필드가 추가되지 않는다
  *  - type·priority 는 아직 int (다음 단계)
+ *
+ * [리팩토링] 패키지 이동: kr.hull.portal.approval → kr.hull.portal.approval.domain (도메인 계층 - 엔티티·값 타입·DB 매핑 변환기)
+ *  - 계층별 하위 패키지로 나눠 클래스의 역할이 패키지 이름에서 드러나게 했다 (Move Class)
+ *  - [보존 대상] 클래스명·public 메서드·엔드포인트·DB 저장값은 그대로. package·import 줄만 바뀌었다
  */
 @Entity
 public class Approval {

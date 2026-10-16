@@ -1,4 +1,4 @@
-package kr.hull.portal.approval;
+package kr.hull.portal.approval.domain;
 
 /**
  * 결재 상태.
@@ -9,6 +9,10 @@ package kr.hull.portal.approval;
  *    @Enumerated(ORDINAL) 를 쓰면 CANCELED(9) 가 순번 4 로 저장되어 데이터가 깨지므로 code 를 명시한다.
  *  - [보존 대상] API 응답 JSON 의 status 는 계속 정수다 (Approval.getStatus() 가 code 를 반환).
  *  - [리팩토링] 상태 라벨도 enum 이 소유한다 (label()). 상태가 늘면 상수 한 줄만 추가하면 되고, 라벨 표가 서비스마다 흩어지지 않는다.
+ *
+ * [리팩토링] 패키지 이동: kr.hull.portal.approval → kr.hull.portal.approval.domain (도메인 계층 - 엔티티·값 타입·DB 매핑 변환기)
+ *  - 계층별 하위 패키지로 나눠 클래스의 역할이 패키지 이름에서 드러나게 했다 (Move Class)
+ *  - [보존 대상] 클래스명·public 메서드·엔드포인트·DB 저장값은 그대로. package·import 줄만 바뀌었다
  */
 public enum ApprovalStatus {
 

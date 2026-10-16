@@ -1,5 +1,8 @@
-package kr.hull.portal.approval;
+package kr.hull.portal.approval.service;
 
+import kr.hull.portal.approval.domain.Approval;
+import kr.hull.portal.approval.domain.ApprovalStatus;
+import kr.hull.portal.approval.repository.ApprovalRepository;
 import kr.hull.portal.common.AuditLogger;
 import kr.hull.portal.common.MailSender;
 import kr.hull.portal.user.User;
@@ -44,6 +47,10 @@ import java.util.List;
  *  - tmp → label (statusLabel), a → amount (amountGrade), act·id → auditAction·approvalId (writeAudit), line → auditLine (create)
  *  - 필드 repo·userRepo·mail·audit → approvalRepository·userRepository·mailSender·auditLogger (생성자 파라미터 이름도 함께)
  *  - 이름만 바꿨다. 로직·분기·매직넘버·public 시그니처·동작은 그대로 (ApprovalServiceTest 6개 green 으로 확인)
+ *
+ * [리팩토링] 패키지 이동: kr.hull.portal.approval → kr.hull.portal.approval.service (애플리케이션(서비스) 계층)
+ *  - 계층별 하위 패키지로 나눠 클래스의 역할이 패키지 이름에서 드러나게 했다 (Move Class)
+ *  - [보존 대상] 클래스명·public 메서드·엔드포인트·DB 저장값은 그대로. package·import 줄만 바뀌었다
  */
 @Service
 public class ApprovalService {

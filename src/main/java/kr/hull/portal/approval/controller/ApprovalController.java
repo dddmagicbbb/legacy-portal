@@ -1,5 +1,7 @@
-package kr.hull.portal.approval;
+package kr.hull.portal.approval.controller;
 
+import kr.hull.portal.approval.domain.Approval;
+import kr.hull.portal.approval.service.ApprovalService;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
@@ -8,6 +10,10 @@ import java.util.Map;
  * 결재 REST 컨트롤러.
  * [스멜] 컨트롤러가 Map 으로 파라미터를 받아 그대로 흘려보낸다(요청 DTO 부재, 검증 없음).
  * [스멜] 서비스의 매직넘버 action 을 그대로 노출한다.
+ *
+ * [리팩토링] 패키지 이동: kr.hull.portal.approval → kr.hull.portal.approval.controller (표현(Web/API) 계층)
+ *  - 계층별 하위 패키지로 나눠 클래스의 역할이 패키지 이름에서 드러나게 했다 (Move Class)
+ *  - [보존 대상] 클래스명·public 메서드·엔드포인트·DB 저장값은 그대로. package·import 줄만 바뀌었다
  */
 @RestController
 @RequestMapping("/api/approvals")

@@ -1,5 +1,8 @@
 package kr.hull.portal.approval;
 
+import kr.hull.portal.approval.domain.Approval;
+import kr.hull.portal.approval.repository.ApprovalRepository;
+import kr.hull.portal.approval.service.ApprovalService;
 import kr.hull.portal.common.FileAuditLogger;
 import kr.hull.portal.common.SmtpMailSender;
 import kr.hull.portal.user.User;

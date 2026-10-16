@@ -5,9 +5,21 @@
 <!-- 사용자가 한 번 말한 금지·필수 사항. 매 턴 읽는다. 지우지 않는다 -->
 
 ## 진행 중
-- [ ] #47 (10-16 10:42) 커밋해줘
+- [ ] #62 (10-16 13:10) 커밋해줘
 
 ## 완료
+- [x] #60 (10-16 11:40) 커밋해줘 (사유: 구현체 rename 커밋, origin/main 일치)
+- [x] #59 (10-16 11:35) 메일/감사로거를 인터페이스로 분리하고 생성자 주입으로 바꿔줘. 구현체는 콘솔 출력 (사유: 파일 consolemailsender.java)
+- [x] #58 (10-16 11:27) ApprovalService에서 직접 new로 생성하는 협력 객체를 모두 찾아줘. (사유: ApprovalService new·정적 생성 전수 조사 후 답변 (파일 변경 없음))
+- [x] #57 (10-16 11:21) 커밋해줘 (사유: submittedBody 커밋, origin/main 일치)
+- [x] #56 (10-16 11:19) submit 도 동일하게 진행해줘 (사유: 파일 approvalservice.java)
+- [x] #55 (10-16 11:11) 커밋해줘 (사유: Extract Method 커밋, origin/main 일치)
+- [x] #54 (10-16 11:08) approve/reject의 긴 메일 본문 조립을 approvedBody/rejectedBody (사유: 파일 approvalservice.java)
+- [x] #53 (10-16 11:05) 커밋해줘 (사유: AmountGrade·README 커밋 2개, origin/main 일치)
+- [x] #52 (10-16 11:03) amountGrade는 금액 등급 도메인 규칙이야. AmountGrade enum으로 Move (사유: 파일 approvalservice.java)
+- [x] #51 (10-16 10:48) ApprovalService의 책임을 나열해줘. 변경 이유(SRP) 기준으로 분류해줘. (사유: ApprovalService 코드 조사 후 SRP 기준 책임 분류 답변 (파일 변경 없음))
+- [x] #48 (10-16 10:43) 리드미 진행 현황이랑 리팩토링 이력 업데이트해줘 (사유: README 진행 현황·리팩토링 이력(9385535 DTO)·패키지 트리·다음 단계 갱신 (스크립트 편집))
+- [x] #47 (10-16 10:42) 커밋해줘 (사유: 남은 변경 TODO.md 커밋, origin/main 일치)
 - [x] #46 (10-16 10:41) 기존 특성화 테스트(1일차 6개 + 오늘 아침 보강분)를 실행(./mvnw test)해서 (사유: ./mvnw test 33개 green (10:41), 새 테스트·파일 변경 없음)
 - [x] #45 (10-16 10:37) 커밋해주세요 (사유: DTO 커밋, origin/main 일치)
 - [x] #44 (10-16 10:17) 요청 Map<String,Object>를 record DTO로 바꿔줘: 생성 (사유: 파일 approvalcontroller.java)

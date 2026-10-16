@@ -1,5 +1,6 @@
 package kr.hull.portal.approval.service;
 
+import kr.hull.portal.approval.domain.AmountGrade;
 import kr.hull.portal.approval.domain.Approval;
 import kr.hull.portal.approval.domain.ApprovalStatus;
 import kr.hull.portal.approval.repository.ApprovalRepository;
@@ -40,6 +41,8 @@ import java.util.List;
  * [리팩토링] processApproval 분해 - guard clause 조기 반환 + submit/approve/reject/cancel 추출 (Extract Method · S02 · B04)
  *
  * [리팩토링] 메일·감사 로거 직접 new → MailSender · AuditLogger 인터페이스 생성자 주입 (DIP · S04 · B02)
+ *
+ * [리팩토링] amountGrade 의 금액 등급 규칙 → AmountGrade enum 으로 Move Method (Feature Envy 해소 · B06). statusLabel 은 앞서 label() 위임 완료
  *
  * [리팩토링] 레거시 약어 지역변수·파라미터 → 의미 있는 이름으로 (Rename Variable · 스멜9 Poor Naming 해소)
  *  - d → approval, u → user, s → status (create · processApproval · statusLabel · amountGrade)
@@ -242,13 +245,12 @@ public class ApprovalService {
         return status == null ? "알수없음" : status.label();
     }
 
-    // [스멜6] Feature Envy — Approval 데이터를 꺼내 금액 등급을 서비스가 계산.
+    // [리팩토링] 레거시: 서비스가 Approval 의 금액을 꺼내 if 사슬 + 매직넘버(10000000·1000000·100000)로 등급 계산
+    //           (스멜6 Feature Envy · S03) → 여기서: 금액 등급 도메인 규칙을 AmountGrade enum 으로 옮기고 위임만 한다
+    //           (Move Method · 백로그 B06)
+    // [보존 대상] public 시그니처 amountGrade(Approval) 와 반환 문자열 "S"·"A"·"B"·"C", 경계(이상 >=)는 그대로
     public String amountGrade(Approval approval) {
-        long amount = approval.getAmount();   // [리팩토링·이름] 레거시 a → amount (금액, 원)
-        if (amount >= 10000000) return "S";   // [스멜3] 1000만원=S — 기준 숫자의 의미가 코드에 없음
-        else if (amount >= 1000000) return "A";   // 100만원=A
-        else if (amount >= 100000) return "B";    // 10만원=B
-        else return "C";
+        return AmountGrade.of(approval.getAmount()).name();
     }
 
     public List<Approval> myDrafts(Long userId) {

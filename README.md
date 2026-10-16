@@ -27,20 +27,21 @@ Claude Code 와 함께 **진단 → 안전망(특성화 테스트) → 작은 �
 ## 1. 진행 현황
 
 ```
-[진단 01~08] ──▶ [안전망 20개] ──▶ [리팩토링 ①이름 ②enum ③라벨 위임 ④processApproval 분해] ──▶ (다음) B02 생성자 주입 · B05 중복 제거
-     완료              완료                        완료 (결재 도메인)
+[진단 01~08] ──▶ [안전망 33개] ──▶ [리팩토링 ①이름 ②enum ③라벨 위임 ④분해 ⑤생성자 주입 ⑥계층 패키지] ──▶ (다음) B03 나머지 · B05 중복 제거
+     완료              완료                              완료 (결재 도메인)
 ```
 
 | 구분 | 상태 | 내용 |
 |---|:---:|---|
 | 진단 | ✅ | 구조 · 중복 · 긴 메서드 · 매직넘버 · 강결합 · 심각도 2종 · 백로그 ([docs/진단](docs/진단)) |
 | 스멜 목록 | ✅ | 16종 S01~S16 ([docs/smells.md](docs/smells.md)) |
-| 특성화 테스트 | ✅ | `ApprovalService` **20개 green** · `processApproval` 분기 커버리지 **87.5%** |
+| 특성화 테스트 | ✅ | 결재 **33개 green** (서비스 25 · API 8) · 메일·감사 로그·API JSON 까지 고정 |
 | 이름 개선 (S09) | ✅ | `ApprovalService` 약어 전부 제거 · Notice/Schedule 일부 |
 | status enum (S03) | ✅ | 결재 status → `ApprovalStatus` + `AttributeConverter` (DB 정수 그대로) |
 | 라벨 위임 (S11) | ✅ | `statusLabel` 5분기 if → `ApprovalStatus.label()` |
 | `processApproval` 분해 (S02) | ✅ | guard clause 조기 반환 + submit/approve/reject/cancel 추출 · 86줄·중첩 5 → 22줄·중첩 1 (B04) |
-| 생성자 주입 (S04) | ⬜ | 다음 단계 (B02) |
+| 생성자 주입 (S04) | ✅ | 메일·감사 로거 직접 `new` 5곳 → `MailSender`·`AuditLogger` 인터페이스 주입 (B02) |
+| 계층별 패키지 | ✅ | `approval` → `controller` · `service` · `domain` · `repository` 하위 패키지 (Move Class) |
 
 ---
 
@@ -171,14 +172,21 @@ curl localhost:8080/api/approvals/inbox/2
 
 ```
 kr.hull.portal
-├── approval/   결재 - Approval · ApprovalStatus(enum) · ApprovalStatusConverter · Repository · Service · Controller
+├── approval/              결재 - 계층별 하위 패키지
+│   ├── controller/        ApprovalController            표현(Web/API)
+│   ├── service/           ApprovalService               애플리케이션(서비스)
+│   ├── domain/            Approval · ApprovalStatus · ApprovalStatusConverter   도메인(엔티티·값 타입·DB 매핑)
+│   └── repository/        ApprovalRepository            영속성(저장소)
 ├── notice/     공지 - Entity · Repository · Service (컨트롤러 없음, API 미노출)
 ├── schedule/   일정 - Entity · Repository · Service (컨트롤러 없음, API 미노출)
 ├── user/       사용자 - Entity · Repository · Controller
-├── common/     SmtpMailSender · FileAuditLogger (실습용 콘솔 출력)
+├── common/     MailSender · AuditLogger (인터페이스) ← SmtpMailSender · FileAuditLogger (@Component, 실습용 콘솔 출력)
 ├── DataSourceConfig  MariaDB ↔ H2 자동 선택
 └── DataSeeder        초기 사용자 4명
 ```
+
+- 결재 도메인만 계층별로 나눴다. 공지·일정·사용자는 아직 한 폴더에 Entity·Repository·Service 가 함께 있다.
+- 의존 방향은 `controller → service → repository → domain` 한 방향이다. 서비스는 메일·로그를 **인터페이스**로만 알고, 구현은 스프링이 생성자로 주입한다.
 
 ### REST API (보존 대상 - 리팩토링 중 변경 금지)
 
@@ -248,16 +256,20 @@ kr.hull.portal
 |---|:---:|---|
 | `ApprovalServiceTest` | 6 | 상신→승인 · 반려 · 취소 · 권한 없는 승인 무시 · 없는 id 무시 · 재승인 무시 |
 | `ApprovalServiceBranchCharacterizationTest` | 14 | 금액 기준 우선순위 상향 · 당사자/권한 확인 · 상태 가드 · 정의 밖 action · 없는 사용자 · `statusLabel` 라벨 · `amountGrade` 경계값 |
+| `ApprovalSideEffectCharacterizationTest` | 5 | 상신 메일(수신자·제목·본문)과 감사 로그 형식 · 999,999원 경계 · 긴급 생성 · 결재자 아닌 반려는 메일·로그 없음 · 상신 전 취소 로그 |
+| `ApprovalApiCharacterizationTest` | 8 | MockMvc - 응답 12개 필드·순서·정수 코드 · 생략 기본값 · urgent · 처리 API 200 + 빈 본문 · 조용한 무시도 200 · 반려 사유 `""` · inbox 기준 |
+| **합계** | **33** | |
 
-| 지표 (`processApproval`) | 1차 (6개) | 2차 (20개) |
-|---|:---:|:---:|
-| 분기 커버리지 | 29/48 (60.4%) | **42/48 (87.5%)** |
-| 라인 커버리지 | 58/60 | **59/59 (100%)** |
+| 지표 (`processApproval`, 3차는 분해 후 위임 메서드 4개 포함) | 1차 (6개) | 2차 (20개) | 3차 (33개) |
+|---|:---:|:---:|:---:|
+| 분기 커버리지 | 29/48 (60.4%) | 42/48 (87.5%) | **42/48 (87.5%)** |
+| 라인 커버리지 | 58/60 | 59/59 (100%) | **73/73 (100%)** |
+| 검증 대상 | 상태 | 상태·우선순위·사유 | + 메일·감사 로그·API JSON |
 
-- **작성 규칙:** `@DataJpaTest` + `@Import(ApprovalService.class)` 로 서비스를 주입받는다 (생성자가 바뀌어도 테스트 본문 무수정). 데이터는 `service.create` 로 만든다. 기대값은 **정수 리터럴(0/1/2/3/9)**. 필드·변수는 영어, 메서드명만 한글 시나리오.
-- **불변 규칙:** 한번 만든 테스트의 본문(호출·기대값)은 리팩토링 중 **절대 수정하지 않는다.** `ApprovalServiceTest.java` 는 생성 커밋(`a93dd56`) 이후 한 글자도 바뀌지 않았다.
-- **레거시 검증:** 2차 14개는 리팩토링 전 코드(`53a532a`)에서도 같은 기대값으로 green - "레거시의 원래 동작"을 고정했다는 증거다.
-- **남은 빈틈:** 결재자·기안자가 null 인 분기 6개, 메일·감사 로그 문구 (B02 이후 가짜 구현 주입으로 추가 예정).
+- **작성 규칙:** 서비스 테스트는 `@DataJpaTest` + `@Import` 로 서비스를 주입받고(생성자가 바뀌어도 본문 무수정), API 테스트는 `@SpringBootTest` + MockMvc 로 전체를 띄워 테스트마다 롤백한다. 메일·로그는 테스트 전용 가짜(`RecordingMailSender`·`RecordingAuditLogger`)를 주입해 검증한다. 데이터는 `service.create` 로 만든다. 기대값은 **정수 리터럴(0/1/2/3/9)**. 필드·변수는 영어, 메서드명만 한글 시나리오.
+- **불변 규칙:** 한번 만든 테스트의 본문(호출·기대값)은 리팩토링 중 **절대 수정하지 않는다.** `ApprovalServiceTest.java` 는 생성 커밋(`a93dd56`) 이후 **컴파일용 줄만** 바뀌었다 - B02 의 `@Import` 1줄 + import 2줄, 계층 패키지 이동의 import 3줄 추가. 테스트 메서드·호출·기대값 줄은 생성 시점과 완전히 같다.
+- **레거시 검증:** 2차 14개와 API 8개는 리팩토링 전 코드(`53a532a`)에서도 같은 기대값으로 green - "레거시의 원래 동작"을 고정했다는 증거다.
+- **남은 빈틈:** 메일 수신자·결재자·기안자가 null 인 분기와 `statusLabel` null 방어 (7개) - 엔티티를 직접 조작해야 만들 수 있어 낮은 우선순위.
 
 ---
 
@@ -274,6 +286,9 @@ kr.hull.portal
 | `8d7a0c6` | ③ 라벨 | 조건문 → enum 소유 (S11) | `statusLabel` 의 임시변수 + 5분기 if → `ApprovalStatus.label()` 위임 |
 | `34dd3b9` | 안전망 보강 | Characterization Test | 분기 특성화 테스트 14개 · 커버리지 87.5% |
 | `25a4163` | ④ 분해 | Guard Clause · Extract Method (S02 · B04) | `processApproval` 의 조회 실패를 조기 반환, 분기를 `submit`·`approve`·`reject`·`cancel` 로 추출하고 내부 중첩 if 도 조기 반환으로 평탄화 |
+| `1b0894d` | ⑤ 주입 | Extract Interface · Constructor Injection (S04 · B02) | `MailSender`·`AuditLogger` 인터페이스 추출, 구현은 `@Component`, 세 서비스의 직접 `new` 5곳 → 생성자 주입. 테스트는 `@Import` 줄만 조정(확인받음) |
+| `5c9e1b2` | 안전망 보강 | Characterization Test | 메일·감사 로그 5개 + API JSON(MockMvc) 8개 → 전체 33개 |
+| `b94d574` | ⑥ 계층 패키지 | Move Class | `approval` 6개 클래스를 `controller`·`service`·`domain`·`repository` 로 이동. package·import 만 변경, 테스트는 import 줄 추가만 |
 
 ### `processApproval` 분해 전후
 
@@ -331,7 +346,7 @@ public ApprovalStatus approvalStatus() { return status; }    // 서비스용 - g
 |---|---|
 | DB 저장값 | `STATUS = 0, 1, 2, 3, 9` · 컬럼 `INTEGER NOT NULL` (레거시 `int` 와 동일) |
 | API 응답 JSON | 필드·순서 동일, `"status"` 는 정수 - 화면(index.html) 무수정 동작 |
-| 특성화 테스트 | 본문 무수정 20개 green |
+| 특성화 테스트 | 본문 무수정 green (당시 20개, 현재 33개) |
 | `@Enumerated` | 사용하지 않음 - `ORDINAL` 은 CANCELED(9)를 4로, `STRING` 은 문자로 저장해 DB 값이 깨진다 |
 
 > **알려진 차이 1가지:** 정의 밖 code(예: `setStatus(5)`)는 레거시에선 그대로 저장됐지만 이제 `IllegalArgumentException` 이 난다. API·서비스는 0/1/2/3/9 만 쓰므로 실제 흐름에선 생기지 않는 경우다.
@@ -402,13 +417,13 @@ public ApprovalStatus approvalStatus() { return status; }    // 서비스용 - g
 
 ## 10. 다음 단계
 
-[08 리팩토링 백로그](docs/진단/08-리팩토링-백로그.md) 순서 (✅ 완료: B04 · 🔄 진행 중: B01 · B03 - 진행 상황은 백로그 2절 표):
+[08 리팩토링 백로그](docs/진단/08-리팩토링-백로그.md) 순서 (✅ 완료: B02 · B04 · 🔄 진행 중: B01 · B03 - 진행 상황은 백로그 2절 표):
 
 | 순서 | 항목 | 내용 |
 |:---:|---|---|
-| 1 | **B02** | `MailSender`·`AuditLogger` 인터페이스 추출 + `@Component` + 생성자 주입 (S04) |
-| 2 | B03 나머지 | action · type · priority · `UserRole` · 공지/일정 상태 enum, 금액 기준 상수 |
-| 3 | **B05** | 감사 로그·메일 공통화, `approve`·`reject` 공통 가드 추출 (S05) |
-| 4 | B06 | 상태 전이·당사자 판정·금액 규칙을 도메인으로 (Rich Domain) |
-| 5 | B01 나머지 · B07 ~ B10 | 공지·일정·API 특성화 테스트 · 공지·일정 중첩 · DTO(record) · 매개변수 객체 · 남은 정리 |
+| 1 | B03 나머지 | action · type · priority · `UserRole` · 공지/일정 상태 enum, 금액 기준 상수 |
+| 2 | **B05** | 감사 로그·메일 공통화, `approve`·`reject` 공통 가드 추출 (S05) - 메일·로그 특성화 테스트가 생겨 안전하게 진행 가능 |
+| 3 | B06 | 상태 전이·당사자 판정·금액 규칙을 도메인으로 (Rich Domain) |
+| 4 | **B08** | 요청/응답 DTO(record) 분리 - 선행 조건인 API 특성화 테스트(B01-5) 완료 |
+| 5 | B01 나머지 · B07 · B09 · B10 | 공지·일정 특성화 테스트 · 공지·일정 중첩·계층 패키지 · 매개변수 객체 · 남은 정리 |
 | 이후 | 재설계 | S12 조용한 실패 → 예외/결과 타입 (동작 변경 - 리팩토링 완료 후 별도 단계) |

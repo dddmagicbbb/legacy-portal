@@ -1,5 +1,7 @@
 package kr.hull.portal.approval;
 
+import kr.hull.portal.common.FileAuditLogger;
+import kr.hull.portal.common.SmtpMailSender;
 import kr.hull.portal.user.User;
 import kr.hull.portal.user.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,7 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * type: 1=지출 3=구매 / priority: 2=보통 3=높음 / role: 1=사원 2=팀장
  */
 @DataJpaTest
-@Import(ApprovalService.class)
+@Import({ApprovalService.class, SmtpMailSender.class, FileAuditLogger.class})
 class ApprovalServiceBranchCharacterizationTest {
 
     private static final int EXPENSE_TYPE = 1;

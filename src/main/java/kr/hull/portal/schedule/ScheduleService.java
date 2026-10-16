@@ -1,6 +1,6 @@
 package kr.hull.portal.schedule;
 
-import kr.hull.portal.common.FileAuditLogger;
+import kr.hull.portal.common.AuditLogger;
 import kr.hull.portal.user.User;
 import kr.hull.portal.user.UserRepository;
 import org.springframework.stereotype.Service;
@@ -14,17 +14,20 @@ import java.time.format.DateTimeFormatter;
  *
  * [리팩토링] 레거시 약어 지역변수 → 의미 있는 이름 (Rename Variable · 스멜9): confirm 의 u → user.
  *            create 루프의 s 는 상태값이 아니라 일정 객체라 status 로 바꾸지 않았다 (sc · flag1 과 함께 다음 단계에서 정리).
+ * [리팩토링] 감사 로거 직접 new → AuditLogger 생성자 주입 (DIP · S04 · B02). 로그 문자열은 그대로.
  */
 @Service
 public class ScheduleService {
 
     private final ScheduleRepository repo;
     private final UserRepository userRepo;
-    private final FileAuditLogger audit = new FileAuditLogger();
+    // [리팩토링·DIP] 레거시 audit = new FileAuditLogger() (직접 생성 · 스멜5) → AuditLogger 생성자 주입, 이름 auditLogger (B02)
+    private final AuditLogger auditLogger;
 
-    public ScheduleService(ScheduleRepository repo, UserRepository userRepo) {
+    public ScheduleService(ScheduleRepository repo, UserRepository userRepo, AuditLogger auditLogger) {
         this.repo = repo;
         this.userRepo = userRepo;
+        this.auditLogger = auditLogger;
     }
 
     public Schedule create(String title, Long ownerId, LocalDateTime startAt,
@@ -63,7 +66,7 @@ public class ScheduleService {
 
         // [스멜4] 또 복붙된 감사 로그.
         String now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-        audit.write("[" + now + "] SCHEDULE CREATE id=" + sc.getId() + " by=" + ownerId);
+        auditLogger.write("[" + now + "] SCHEDULE CREATE id=" + sc.getId() + " by=" + ownerId);
         return sc;
     }
 
@@ -77,7 +80,7 @@ public class ScheduleService {
                 sc.setStatus(1);   // 1 = 확정 (CONFIRMED)
                 repo.save(sc);
                 String now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-                audit.write("[" + now + "] SCHEDULE CONFIRM id=" + sc.getId() + " by=" + userId);
+                auditLogger.write("[" + now + "] SCHEDULE CONFIRM id=" + sc.getId() + " by=" + userId);
             }
         }
     }

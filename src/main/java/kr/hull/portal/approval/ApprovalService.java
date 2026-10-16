@@ -1,7 +1,7 @@
 package kr.hull.portal.approval;
 
-import kr.hull.portal.common.FileAuditLogger;
-import kr.hull.portal.common.SmtpMailSender;
+import kr.hull.portal.common.AuditLogger;
+import kr.hull.portal.common.MailSender;
 import kr.hull.portal.user.User;
 import kr.hull.portal.user.UserRepository;
 import org.springframework.stereotype.Service;
@@ -36,6 +36,8 @@ import java.util.List;
  *
  * [리팩토링] processApproval 분해 - guard clause 조기 반환 + submit/approve/reject/cancel 추출 (Extract Method · S02 · B04)
  *
+ * [리팩토링] 메일·감사 로거 직접 new → MailSender · AuditLogger 인터페이스 생성자 주입 (DIP · S04 · B02)
+ *
  * [리팩토링] 레거시 약어 지역변수·파라미터 → 의미 있는 이름으로 (Rename Variable · 스멜9 Poor Naming 해소)
  *  - d → approval, u → user, s → status (create · processApproval · statusLabel · amountGrade)
  *  - processApproval 의 임시변수 proc 제거 → 파라미터 action 을 직접 비교
@@ -50,14 +52,18 @@ public class ApprovalService {
     private final ApprovalRepository approvalRepository;
     private final UserRepository userRepository;
 
-    // [스멜5] 강결합 — 협력 객체를 생성자 주입 없이 직접 new 한다. 테스트에서 갈아끼울 수 없다.
-    // [리팩토링·이름] 레거시 mail · audit → mailSender · auditLogger (역할이 드러나는 이름. 직접 new 는 B02 에서 생성자 주입으로)
-    private final SmtpMailSender mailSender = new SmtpMailSender();
-    private final FileAuditLogger auditLogger = new FileAuditLogger();
+    // [리팩토링·DIP] 레거시: private final SmtpMailSender mail = new SmtpMailSender(); (구체 클래스 직접 new · 스멜5)
+    //              → 여기서: 인터페이스 MailSender · AuditLogger 타입 필드 + 생성자 주입 (B02)
+    //                테스트·운영에서 구현을 갈아끼울 수 있고, 의존성이 생성자에 드러난다
+    private final MailSender mailSender;
+    private final AuditLogger auditLogger;
 
-    public ApprovalService(ApprovalRepository approvalRepository, UserRepository userRepository) {
+    public ApprovalService(ApprovalRepository approvalRepository, UserRepository userRepository,
+                           MailSender mailSender, AuditLogger auditLogger) {
         this.approvalRepository = approvalRepository;
         this.userRepository = userRepository;
+        this.mailSender = mailSender;
+        this.auditLogger = auditLogger;
     }
 
     // [스멜8] 파라미터 8개. [스멜9] 이름이 모호하다.

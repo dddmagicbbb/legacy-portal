@@ -1,7 +1,7 @@
 package kr.hull.portal.notice;
 
-import kr.hull.portal.common.FileAuditLogger;
-import kr.hull.portal.common.SmtpMailSender;
+import kr.hull.portal.common.AuditLogger;
+import kr.hull.portal.common.MailSender;
 import kr.hull.portal.user.User;
 import kr.hull.portal.user.UserRepository;
 import org.springframework.stereotype.Service;
@@ -17,6 +17,7 @@ import java.time.format.DateTimeFormatter;
  *
  * [리팩토링] 레거시 약어 지역변수 → 의미 있는 이름 (Rename Variable · 스멜9): publish 의 u → user, statusLabel 의 s → status.
  *            이름만 바꿨고 동작은 그대로. 공지 객체 n 은 다음 단계에서 정리.
+ * [리팩토링] 메일·감사 로거 직접 new → MailSender · AuditLogger 생성자 주입 (DIP · S04 · B02). 출력 내용·발송 조건은 그대로.
  */
 @Service
 public class NoticeService {
@@ -24,12 +25,17 @@ public class NoticeService {
     private final NoticeRepository repo;
     private final UserRepository userRepo;
 
-    private final SmtpMailSender mail = new SmtpMailSender();
-    private final FileAuditLogger audit = new FileAuditLogger();
+    // [리팩토링·DIP] 레거시 mail · audit = new SmtpMailSender() · new FileAuditLogger() (직접 생성 · 스멜5)
+    //              → 인터페이스 MailSender · AuditLogger 생성자 주입, 이름도 mailSender · auditLogger 로 (B02)
+    private final MailSender mailSender;
+    private final AuditLogger auditLogger;
 
-    public NoticeService(NoticeRepository repo, UserRepository userRepo) {
+    public NoticeService(NoticeRepository repo, UserRepository userRepo,
+                         MailSender mailSender, AuditLogger auditLogger) {
         this.repo = repo;
         this.userRepo = userRepo;
+        this.mailSender = mailSender;
+        this.auditLogger = auditLogger;
     }
 
     public Notice create(String title, String content, int category, Long writerId, boolean pinned) {
@@ -45,7 +51,7 @@ public class NoticeService {
 
         // [스멜4] ApprovalService.create() 와 사실상 동일한 감사 로그 코드(복붙).
         String now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-        audit.write("[" + now + "] NOTICE CREATE id=" + n.getId() + " by=" + writerId);
+        auditLogger.write("[" + now + "] NOTICE CREATE id=" + n.getId() + " by=" + writerId);
         return n;
     }
 
@@ -66,11 +72,11 @@ public class NoticeService {
                     for (User member : userRepo.findAll()) {
                         String body = "안녕하세요 " + member.getName() + "님,\n"
                                 + "긴급 공지가 게시되었습니다.\n제목: " + n.getTitle();
-                        mail.send(member.getEmail(), "[긴급공지] " + n.getTitle(), body);
+                        mailSender.send(member.getEmail(), "[긴급공지] " + n.getTitle(), body);
                     }
                 }
                 String now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-                audit.write("[" + now + "] NOTICE PUBLISH id=" + n.getId() + " by=" + userId);
+                auditLogger.write("[" + now + "] NOTICE PUBLISH id=" + n.getId() + " by=" + userId);
             }
         }
     }

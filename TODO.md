@@ -5,9 +5,19 @@
 <!-- 사용자가 한 번 말한 금지·필수 사항. 매 턴 읽는다. 지우지 않는다 -->
 
 ## 진행 중
-- [ ] #31 (10-15 17:16) 커밋해주세요
+- [ ] #38 (10-16 09:40) 기존 6개가 그대로인지 diff 로 보여주고, 전체 테스트 돌려서 green
 
 ## 완료
+- [x] #37 (10-16 09:25) 오늘 바꿀 코드의 안전망을 다시 점검해줘. JaCoCo 리포트로 processApproval 에서 (사유: 파일 approvalapicharacterizationtest.java)
+- [x] #36 (10-16 09:19) 커밋해주세요 (사유: B02 커밋, origin/main 일치)
+- [x] #35 (10-16 09:17) B02 진행해줘 (사유: 파일 mailsender.java)
+- [x] #34 (10-16 09:14) hi (사유: 인사 - 상태 확인 후 답변)
+- [x] #33 (10-15 17:28) 리드미 리팩토링 이력이랑 백로그 업데이트 해주고 커밋해줘. (사유: 파일 readme.md)
+- [x] #32.4 (10-15 17:16) 필드 repo·userRepo도 rename (approvalRepository·userRepository) (사유: 352c127 에서 이미 approvalRepository·userRepository 로 rename 완료, 남은 사용처 0건)
+- [x] #32.3 (10-15 17:16) 외부 시그니처·동작은 그대로 유지 (사유: 특성화 20개 본문 무수정 green, 메일 문구·감사 로그 행위명 HEAD 와 동일, public 시그니처 유지)
+- [x] #32.2 (10-15 17:16) 각 분기를 submit/approve/reject/cancel private 메서드로 추출 (사유: 파일 approvalservice.java)
+- [x] #32.1 (10-15 17:16) 초기 null·권한 체크를 guard clause로 빼서 조기 반환 (사유: 파일 approvalservice.java)
+- [x] #31 (10-15 17:16) 커밋해주세요 (사유: 남은 변경 TODO.md 커밋, origin/main 일치)
 - [x] #30 (10-15 17:08) 실행하는 캡쳐 이미지도 있잫아 그것도 리드미에 반영해서 설명이 쉽계 만들어 줘 (사유: 파일 readme.md)
 - [x] #29 (10-15 17:07) 지금까지 내용을 기반으로 깃허브 리드미 자세히 작성해서 올려줘 (사유: 파일 readme.md)
 - [x] #28 (10-15 17:06) 커밋 하면 푸시하고 있는 거지? (사유: post-commit 훅 확인, HEAD 와 origin/main 일치 확인)

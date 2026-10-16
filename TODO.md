@@ -5,9 +5,16 @@
 <!-- 사용자가 한 번 말한 금지·필수 사항. 매 턴 읽는다. 지우지 않는다 -->
 
 ## 진행 중
-- [ ] #38 (10-16 09:40) 기존 6개가 그대로인지 diff 로 보여주고, 전체 테스트 돌려서 green
+- [ ] #47 (10-16 10:42) 커밋해줘
 
 ## 완료
+- [x] #46 (10-16 10:41) 기존 특성화 테스트(1일차 6개 + 오늘 아침 보강분)를 실행(./mvnw test)해서 (사유: ./mvnw test 33개 green (10:41), 새 테스트·파일 변경 없음)
+- [x] #45 (10-16 10:37) 커밋해주세요 (사유: DTO 커밋, origin/main 일치)
+- [x] #44 (10-16 10:17) 요청 Map<String,Object>를 record DTO로 바꿔줘: 생성 (사유: 파일 approvalcontroller.java)
+- [x] #43 (10-16 09:57) 나눠서 커밋해줘 (사유: 패키지 이동 b94d574·README 커밋 2개로 분리, origin/main 일치)
+- [x] #42 (10-16 09:56) readme 파일도 수정해주세요. (사유: README 진행 현황·패키지 구조·안전망·리팩토링 이력·다음 단계 갱신 (스크립트 편집))
+- [x] #41 (10-16 09:54) approval 패키지 클래스를 계층별 하위 패키지로 옮겨줘: (사유: 파일 approvalrepository.java)
+- [x] #38 (10-16 09:40) 기존 6개가 그대로인지 diff 로 보여주고, 전체 테스트 돌려서 green (사유: 기존 6개 diff 확인(@Import 3줄만), 전체 33 green, TODO.md 커밋·push)
 - [x] #37 (10-16 09:25) 오늘 바꿀 코드의 안전망을 다시 점검해줘. JaCoCo 리포트로 processApproval 에서 (사유: 파일 approvalapicharacterizationtest.java)
 - [x] #36 (10-16 09:19) 커밋해주세요 (사유: B02 커밋, origin/main 일치)
 - [x] #35 (10-16 09:17) B02 진행해줘 (사유: 파일 mailsender.java)

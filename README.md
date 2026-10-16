@@ -27,15 +27,15 @@ Claude Code 와 함께 **진단 → 안전망(특성화 테스트) → 작은 �
 ## 1. 진행 현황
 
 ```
-[진단 01~08] ──▶ [안전망 33개] ──▶ [리팩토링 ①이름 ②enum ③라벨 위임 ④분해 ⑤생성자 주입 ⑥계층 패키지 ⑦DTO] ──▶ (다음) B03 나머지 · B05 중복 제거
-     완료              완료                                  완료 (결재 도메인)
+[진단 01~08] ──▶ [안전망 60개] ──▶ [리팩토링 ①이름 ②enum ③라벨 ④분해 ⑤주입 ⑥계층 ⑦DTO ⑧등급 enum ⑨감사 로그 일원화 ⑩Rich Domain] ──▶ (다음) B05 메일 · B03 나머지 · B09
+     완료              완료                                     완료 (결재 중심 · 감사 로그는 세 서비스 공통)
 ```
 
 | 구분 | 상태 | 내용 |
 |---|:---:|---|
 | 진단 | ✅ | 구조 · 중복 · 긴 메서드 · 매직넘버 · 강결합 · 심각도 2종 · 백로그 ([docs/진단](docs/진단)) |
 | 스멜 목록 | ✅ | 16종 S01~S16 ([docs/smells.md](docs/smells.md)) |
-| 특성화 테스트 | ✅ | 결재 **33개 green** (서비스 25 · API 8) · 메일·감사 로그·API JSON 까지 고정 |
+| 특성화 테스트 | ✅ | **60개 green** - 결재 33 (서비스 25 · API 8) · 공지 10 · 일정 17. 메일·감사 로그·API JSON 까지 고정 (+ 메일 단위 테스트 6) |
 | 이름 개선 (S09) | ✅ | `ApprovalService` 약어 전부 제거 · Notice/Schedule 일부 |
 | status enum (S03) | ✅ | 결재 status → `ApprovalStatus` + `AttributeConverter` (DB 정수 그대로) |
 | 라벨 위임 (S11) | ✅ | `statusLabel` 5분기 if → `ApprovalStatus.label()` |
@@ -43,7 +43,12 @@ Claude Code 와 함께 **진단 → 안전망(특성화 테스트) → 작은 �
 | 생성자 주입 (S04) | ✅ | 메일·감사 로거 직접 `new` 5곳 → `MailSender`·`AuditLogger` 인터페이스 주입 (B02) |
 | 계층별 패키지 | ✅ | `approval` → `controller` · `service` · `domain` · `repository` 하위 패키지 (Move Class) |
 | 요청/응답 DTO (S07) | ✅ | `Map` 요청·엔티티 응답 → `CreateApprovalRequest`·`ProcessRequest`·`ApprovalResponse` record (B08) |
-| 동작 보존 확인 | ✅ | 위 리팩토링 전부 거친 뒤 `./mvnw test` 33개 green - 테스트 본문은 컴파일용 import·`@Import` 줄 외 무수정 |
+| 금액 등급 enum (S06) | ✅ | `amountGrade` 의 if 사슬·매직넘버 → `AmountGrade` enum 으로 Move Method |
+| 메일 본문 추출 | ✅ | `submit`·`approve`·`reject` 의 본문 조립 → `submittedBody`·`approvedBody`·`rejectedBody` (Extract Method) |
+| 구현체 이름 | ✅ | `SmtpMailSender`·`FileAuditLogger` → 실제 동작대로 `ConsoleMailSender`·`ConsoleAuditLogger` (Rename Class) |
+| 감사 로그 일원화 (S05) | ✅ | 세 서비스 6곳의 시각 포맷·문자열 조립 → `AuditLogger.write(action, id, userId)`, 포맷은 `ConsoleAuditLogger` 한 곳 (B05 일부) |
+| Rich Domain (S06) | ✅ | 상태 전이 규칙을 `Approval` 행위(`draft`·`submit`·`approve`·`reject`·`cancel`)로 이동 - Tell, Don't Ask (B06) |
+| 동작 보존 확인 | ✅ | 위 리팩토링 전부 거친 뒤 `./mvnw test` 66개 green (특성화 60 + 단위 6) - 특성화 테스트 본문은 컴파일용 import·`@Import` 줄 외 무수정 |
 
 ---
 
@@ -178,12 +183,12 @@ kr.hull.portal
 │   ├── controller/        ApprovalController            표현(Web/API)
 │   ├── dto/               CreateApprovalRequest · ProcessRequest · ApprovalResponse   요청/응답 record (엔티티 비노출)
 │   ├── service/           ApprovalService               애플리케이션(서비스)
-│   ├── domain/            Approval · ApprovalStatus · ApprovalStatusConverter   도메인(엔티티·값 타입·DB 매핑)
+│   ├── domain/            Approval · ApprovalStatus · ApprovalStatusConverter · AmountGrade   도메인(엔티티·행위·값 타입·DB 매핑)
 │   └── repository/        ApprovalRepository            영속성(저장소)
 ├── notice/     공지 - Entity · Repository · Service (컨트롤러 없음, API 미노출)
 ├── schedule/   일정 - Entity · Repository · Service (컨트롤러 없음, API 미노출)
 ├── user/       사용자 - Entity · Repository · Controller
-├── common/     MailSender · AuditLogger (인터페이스) ← SmtpMailSender · FileAuditLogger (@Component, 실습용 콘솔 출력)
+├── common/     MailSender · AuditLogger (인터페이스) ← ConsoleMailSender · ConsoleAuditLogger (@Component, 실습용 콘솔 출력 · 감사 로그 포맷의 유일한 위치)
 ├── DataSourceConfig  MariaDB ↔ H2 자동 선택
 └── DataSeeder        초기 사용자 4명
 ```
@@ -261,7 +266,10 @@ kr.hull.portal
 | `ApprovalServiceBranchCharacterizationTest` | 14 | 금액 기준 우선순위 상향 · 당사자/권한 확인 · 상태 가드 · 정의 밖 action · 없는 사용자 · `statusLabel` 라벨 · `amountGrade` 경계값 |
 | `ApprovalSideEffectCharacterizationTest` | 5 | 상신 메일(수신자·제목·본문)과 감사 로그 형식 · 999,999원 경계 · 긴급 생성 · 결재자 아닌 반려는 메일·로그 없음 · 상신 전 취소 로그 |
 | `ApprovalApiCharacterizationTest` | 8 | MockMvc - 응답 12개 필드·순서·정수 코드 · 생략 기본값 · urgent · 처리 API 200 + 빈 본문 · 조용한 무시도 200 · 반려 사유 `""` · inbox 기준 |
-| **합계** | **33** | |
+| `NoticeServiceCharacterizationTest` | 10 | 생성 · 게시 권한(팀장↑) · 작성자 아닌 팀장도 게시 · 긴급 공지는 게시자 포함 전 직원 메일 · 재게시 무시 · `statusLabel` |
+| `ScheduleServiceCharacterizationTest` | 17 | 검증 실패는 원인 구분 없이 `null` · 시간 겹침 경계(맞닿음·다른 소유자·취소 일정) · 공백 제목·없는 소유자로도 생성 · 확정 · 소유자 없는 확정은 NPE |
+| **특성화 합계** | **60** | |
+| `ApprovalServiceMailUnitTest` (단위) | 6 | 서비스를 생성자로 직접 조립 - 실제 JPA 저장소 + `FakeMailSender` + `mock(AuditLogger)`. `send` 호출 횟수·수신자·제목·본문, 승인·반려 메일 본문까지 |
 
 | 지표 (`processApproval`, 3차는 분해 후 위임 메서드 4개 포함) | 1차 (6개) | 2차 (20개) | 3차 (33개) |
 |---|:---:|:---:|:---:|
@@ -272,6 +280,8 @@ kr.hull.portal
 - **작성 규칙:** 서비스 테스트는 `@DataJpaTest` + `@Import` 로 서비스를 주입받고(생성자가 바뀌어도 본문 무수정), API 테스트는 `@SpringBootTest` + MockMvc 로 전체를 띄워 테스트마다 롤백한다. 메일·로그는 테스트 전용 가짜(`RecordingMailSender`·`RecordingAuditLogger`)를 주입해 검증한다. 데이터는 `service.create` 로 만든다. 기대값은 **정수 리터럴(0/1/2/3/9)**. 필드·변수는 영어, 메서드명만 한글 시나리오.
 - **불변 규칙:** 한번 만든 테스트의 본문(호출·기대값)은 리팩토링 중 **절대 수정하지 않는다.** `ApprovalServiceTest.java` 는 생성 커밋(`a93dd56`) 이후 **컴파일용 줄만** 바뀌었다 - B02 의 `@Import` 1줄 + import 2줄, 계층 패키지 이동의 import 3줄 추가. 테스트 메서드·호출·기대값 줄은 생성 시점과 완전히 같다.
 - **레거시 검증:** 2차 14개와 API 8개는 리팩토링 전 코드(`53a532a`)에서도 같은 기대값으로 green - "레거시의 원래 동작"을 고정했다는 증거다.
+- **이상한 동작도 기록:** 공지·일정 테스트는 "작성자 아닌 팀장도 게시", "공백 제목으로 생성", "소유자 없는 확정은 NPE" 처럼 결함으로 보이는 현재 동작도 그대로 고정했다 - 고치는 것은 재설계 단계.
+- **운영 포맷 그대로 검증:** 테스트용 `RecordingAuditLogger` 는 `ConsoleAuditLogger` 를 상속해 포맷을 물려받고 출력만 바꾼다. 그래서 테스트가 검증하는 로그 문자열이 곧 운영 포맷이다.
 - **남은 빈틈:** 메일 수신자·결재자·기안자가 null 인 분기와 `statusLabel` null 방어 (7개) - 엔티티를 직접 조작해야 만들 수 있어 낮은 우선순위.
 
 ---
@@ -293,6 +303,13 @@ kr.hull.portal
 | `5c9e1b2` | 안전망 보강 | Characterization Test | 메일·감사 로그 5개 + API JSON(MockMvc) 8개 → 전체 33개 |
 | `b94d574` | ⑥ 계층 패키지 | Move Class | `approval` 6개 클래스를 `controller`·`service`·`domain`·`repository` 로 이동. package·import 만 변경, 테스트는 import 줄 추가만 |
 | `9385535` | ⑦ DTO | Introduce Parameter Object · Replace Entity with DTO (S07 · B08) | 요청 `Map<String,Object>` → `CreateApprovalRequest`·`ProcessRequest`, 응답 엔티티 → `ApprovalResponse`. 생략 기본값은 compact 생성자(amount 0 · urgent false · reason `""`), 필수 필드는 래퍼 타입이라 누락 시 레거시처럼 500 |
+| `8d703ce` | ⑧ 등급 enum | Move Method (S06 · B06) | `amountGrade` 의 금액 하한 if 사슬 → `AmountGrade` enum(S·A·B·C 하한 소유), 서비스는 위임만 |
+| `c5f81f5` · `58eab01` | 메일 본문 | Extract Method | 상신·승인·반려 메일 본문 조립 → `submittedBody`·`approvedBody`·`rejectedBody` (서비스 private) |
+| `96e066c` | 구현체 이름 | Rename Class | `SmtpMailSender`→`ConsoleMailSender`, `FileAuditLogger`→`ConsoleAuditLogger` (하는 일 그대로). 서비스 코드 변경 없음 - 인터페이스 의존 덕분 |
+| `2fdc52b` | 안전망 보강 | Characterization Test | 공지 10개 · 일정 17개 → 특성화 60개 |
+| `ec1a3a4` | ⑨ 감사 로그 일원화 | Extract/Move Method (S05 · B05) | `AuditLogger.write(action, id, userId[, detail])` 추가, 세 서비스 6곳의 포맷 조립·`writeAudit` 제거. `APPROVAL CREATE` 의 ` type=…` 꼬리는 detail 로 보존 |
+| `ebd0724` | 단위 테스트 | Fake · Mock | `FakeMailSender` 로 `send` 호출 검증 6개 |
+| `8ee835a` | ⑩ Rich Domain | Tell, Don't Ask · Move Method (S06 · B06) | `Approval.draft` 정적 팩토리 + `submit`·`approve(user)`·`reject(user, reason)`·`cancel(userId)` 가 판단·상태 변경·updatedAt 을 책임. 서비스는 호출 후 `true` 일 때만 저장·메일·로그 |
 
 ### `processApproval` 분해 전후
 
@@ -333,6 +350,32 @@ private void approve(Approval approval, User user, Long userId) {
 
 - 조건이 맞지 않으면 예외 없이 `return` 하는 레거시 동작, 메일 문구, 감사 로그 행위명, 처리 순서(상태 → updatedAt → save → 메일 → 로그)는 그대로다. 메일 문구는 직전 커밋과 한 줄씩 대조했다.
 - `approve` 와 `reject` 의 가드 3줄, 메서드마다 반복되는 메일 본문 조립은 아직 중복이다 - B05 에서 공통화한다.
+
+### Rich Domain 전환 전후 (Tell, Don't Ask)
+
+```java
+// 전 - 서비스가 엔티티 값을 꺼내 판단(ask)하고 setter 로 바꿈
+if (approval.approvalStatus() != ApprovalStatus.SUBMITTED) { return; }
+if (approval.getApproverId() == null || !approval.getApproverId().equals(userId)) { return; }
+if (user.getRole() < 2) { return; }
+approval.changeStatus(ApprovalStatus.APPROVED);
+approval.setUpdatedAt(LocalDateTime.now());
+
+// 후 - 서비스는 시키기만(tell), 엔티티가 판단·변경·시각 갱신을 책임
+if (!approval.approve(user)) { return; }      // false = 레거시의 조용한 무시
+approvalRepository.save(approval);             // 성공했을 때만 저장·메일·감사 로그
+```
+
+| 위치 | 책임 |
+|---|---|
+| `Approval.draft(...)` | 시작 상태 DRAFT · 긴급이면 priority 3 · 생성 시각 |
+| `Approval.submit()` | DRAFT 일 때만 · 지출 100만원↑ 이면 priority 3 |
+| `Approval.approve(user)` / `reject(user, reason)` | SUBMITTED · 결재자 본인 · 팀장 이상 (공통 가드 `canBeDecidedBy`) |
+| `Approval.cancel(userId)` | DRAFT·SUBMITTED · 기안자 본인 |
+| `ApprovalService` | 조회 · 행위 호출 · 성공 시 저장 · 메일 · 감사 로그 (조율만) |
+
+- 서비스에서 `ApprovalStatus` 비교·`setStatus`·`setUpdatedAt`·`getRole() < 2` 가 사라졌다. 상태는 이제 도메인 행위로만 바뀐다 (서비스 전용 `changeStatus` 삭제).
+- `Approval` 의 public getter/setter 는 계약 보존을 위해 남겼다 - 외부에서 상태를 바꾸는 통로(`setStatus(int)`) 를 막는 것은 재설계 단계.
 
 ### DTO 전환에서 지킨 계약
 
@@ -451,13 +494,13 @@ public ApprovalStatus approvalStatus() { return status; }    // 서비스용 - g
 
 ## 10. 다음 단계
 
-[08 리팩토링 백로그](docs/진단/08-리팩토링-백로그.md) 순서 (✅ 완료: B02 · B04 · B08 · 🔄 진행 중: B01 · B03 - 진행 상황은 백로그 2절 표):
+[08 리팩토링 백로그](docs/진단/08-리팩토링-백로그.md) 순서 (✅ 완료: B02 · B04 · B06(결재) · B08 · 🔄 진행 중: B01 · B03 · B05 - 진행 상황은 백로그 2절 표):
 
 | 순서 | 항목 | 내용 |
 |:---:|---|---|
-| 1 | B03 나머지 | action · type · priority · `UserRole` · 공지/일정 상태 enum, 금액 기준 상수 |
-| 2 | **B05** | 감사 로그·메일 공통화, `approve`·`reject` 공통 가드 추출 (S05) - 메일·로그 특성화 테스트가 생겨 안전하게 진행 가능 |
-| 3 | B06 | 상태 전이·당사자 판정·금액 규칙을 도메인으로 (Rich Domain) |
-| 4 | B09 | `create` 파라미터 8개 → 매개변수 객체 (public 시그니처 유지, `CreateApprovalRequest` 재사용 검토) |
-| 5 | B01 나머지 · B07 · B10 | 공지·일정 특성화 테스트 · 공지·일정 중첩·계층 패키지 · 남은 정리 |
+| 1 | **B05 나머지** | 메일 템플릿 공통화 - 결재 3종(`submittedBody` 등)과 공지 긴급 메일의 인사말·제목 태그 중복 (감사 로그는 완료) |
+| 2 | **B09** | `create` 8개 파라미터·`Approval.draft` 8개 → DTO 를 서비스까지만 전달하거나 생성 명령 객체로 (도메인은 DTO 를 모르게, `create(8개)` public 시그니처는 위임으로 보존). `approve`·`reject` 의 `user`·`userId` 중복 인자 정리 |
+| 3 | B03 나머지 | action · type · priority · `UserRole`(→ `role >= 2` 를 `hasApprovalAuthority()` 로) · 공지/일정 상태 enum |
+| 4 | B07 | 공지·일정 중첩 평탄화·Rich Domain - 특성화 27개가 안전망 |
+| 5 | B10 · 기타 | `UserController` 엔티티 응답 → `UserResponse` (먼저 `/api/users` 특성화 테스트) · `ScheduleService.create` 의 `startAt`·`endAt` → `TimeRange` 값 객체 · 남은 정리 |
 | 이후 | 재설계 | S12 조용한 실패 → 예외/결과 타입 (동작 변경 - 리팩토링 완료 후 별도 단계) |
